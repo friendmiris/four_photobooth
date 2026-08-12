@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>인생네컷 포토부스</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- 사람 위치를 인식해서 귀신을 반대쪽에 배치하기 위한 얼굴 인식 라이브러리 -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js"></script>
+<style>
+/* ============================================================
+   설정(CONFIG)은 이 파일 하단 스크립트 안의 CONFIG, THEMES 객체에서
+   직접 수정하세요. (Supabase 주소/키, 기본 타이틀, 테마 목록 등)
+   ============================================================ */
+:root{
+  --bg:#0a0808;
+  --bg-2:#141010;
+  --panel:#181414;
+  --line:rgba(255,255,255,0.08);
+  --ink:#f2ece6;
+  --ink-dim:#8f8480;
+  --blood:#8a1414;
+  --blood-bright:#c22222;
+  --font-display:'Noto Serif KR', 'Nanum Myeongjo', serif;
+  --font-body:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{
+  margin:0;padding:0;height:100%;width:100%;
+  background:#000;color:var(--ink);
+  font-family:var(--font-body);
+  overflow:hidden;
+  -webkit-user-select:none;user-select:none;
+}
+#app{
+  position:relative;height:100vh;width:100%;
+  max-width:900px;margin:0 auto;
+  background:var(--bg);
+  box-shadow:0 0 80px rgba(0,0,0,.8);
+}
+
+.screen{
+  position:absolute;inset:0;
+  display:none;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:32px;
+  opacity:0;
+  transition:opacity .5s ease;
+}
+.screen.active{display:flex;opacity:1;}
+
+/* ---------- noise / vignette signature layer ---------- */
+.grain{
+  position:fixed;inset:0;pointer-events:none;z-index:50;
+  opacity:.06;mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.vignette{
+  position:fixed;inset:0;pointer-events:none;z-index:49;
+  box-shadow:inset 0 0 220px rgba(0,0,0,0.85);
+}
+
+/* ---------- HOME ---------- */
+#screen-home .logo-wrap{text-align:center;}
+#screen-home h1{
+  font-family:var(--font-display);
+  font-size:clamp(40px, 12vw, 64px);letter-spacing:6px;margin:0;
+  color:var(--ink);
+  text-shadow:0 0 18px rgba(194,34,34,.35);
+  animation:flicker 5s infinite;
+}
+@keyframes flicker{
+  0%,89%,91%,100%{opacity:1;}
+  90%{opacity:.55;}
+}
+#screen-home .eng{
+  font-size:23px;letter-spacing:10px;color:var(--ink-dim);margin-top:10px;
+}
+#screen-home .tagline{
+  margin-top:22px;color:var(--ink-dim);font-size:25px;letter-spacing:2px;
+}
+.btn-primary{
+  margin-top:56px;
+  padding:18px 56px;
+  border:1px solid var(--blood-bright);
+  background:transparent;
+  color:var(--ink);
+  font-family:var(--font-display);
+  font-size:30px;letter-spacing:4px;
+  cursor:pointer;
+  position:relative;
+  transition:.25s;
+}
+.btn-primary:active{background:var(--blood);}
+.crack-hint{
+  position:absolute;bottom:34px;font-size:21px;color:var(--ink-dim);letter-spacing:2px;
+}
+
+/* ---------- THEME / SETTINGS ---------- */
+#screen-theme{align-items:stretch;justify-content:flex-start;padding:40px;}
+.step-title{font-family:var(--font-display);font-size:32px;letter-spacing:3px;margin-bottom:4px;}
+.step-sub{color:var(--ink-dim);font-size:23px;margin-bottom:22px;letter-spacing:1px;}
+.theme-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+  gap:16px;margin-bottom:30px;max-height:38vh;overflow-y:auto;padding:4px;
+}
+.theme-card{
+  border:2px solid var(--line);
+  border-radius:10px;
+  padding:16px;text-align:center;cursor:pointer;background:var(--panel);
+  transition:.2s;
+}
+.theme-card:hover{border-color:rgba(194,34,34,.5);transform:translateY(-2px);}
+.theme-card.selected{border-color:var(--blood-bright);box-shadow:0 0 18px rgba(194,34,34,.4);}
+.theme-swatch{
+  height:88px;border-radius:8px;margin-bottom:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:34px;
+  box-shadow:inset 0 0 20px rgba(0,0,0,.5);
+}
+.theme-name{font-size:24px;letter-spacing:1px;font-weight:600;}
+.theme-desc{font-size:16px;color:var(--ink-dim);margin-top:4px;letter-spacing:.5px;}
+.theme-card.upload{display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink-dim);border-style:dashed;border-radius:10px;}
+.theme-card.upload input{display:none;}
+
+.interval-row{display:flex;gap:12px;margin-bottom:30px;flex-wrap:wrap;}
+.chip{
+  padding:12px 22px;border:1px solid var(--line);background:var(--panel);
+  cursor:pointer;font-size:24px;letter-spacing:1px;
+}
+.chip.selected{border-color:var(--blood-bright);color:var(--ink);background:rgba(138,20,20,.25);}
+.chip input{width:56px;background:transparent;border:none;color:var(--ink);font-size:24px;outline:none;}
+
+.nav-row{display:flex;justify-content:space-between;margin-top:auto;}
+.btn-ghost{
+  padding:14px 28px;border:1px solid var(--line);background:transparent;color:var(--ink-dim);
+  font-size:24px;letter-spacing:2px;cursor:pointer;
+}
+.btn-go{
+  padding:14px 40px;border:1px solid var(--blood-bright);background:var(--blood);color:var(--ink);
+  font-size:25px;letter-spacing:3px;cursor:pointer;
+}
+
+/* ---------- CAMERA ---------- */
+#screen-camera{padding:0;background:#000;}
+.cam-wrap{
+  position:relative;width:100%;height:100%;
+  display:flex;flex-direction:column;align-items:center;
+  padding:20px 20px 28px;
+}
+.cam-topbar{
+  width:100%;display:flex;justify-content:space-between;align-items:flex-start;
+  z-index:5;margin-bottom:6px;
+}
+.cam-topbar-left{display:flex;flex-direction:column;gap:8px;align-items:flex-start;}
+.cam-btn{
+  background:rgba(0,0,0,.55);border:1px solid var(--line);color:var(--ink);
+  padding:9px 14px;font-size:22px;letter-spacing:1px;cursor:pointer;
+}
+.cam-logo{
+  font-family:var(--font-display);letter-spacing:4px;font-size:30px;
+  color:var(--ink);text-align:center;padding-top:4px;
+}
+.shot-dots{display:flex;gap:9px;padding-top:12px;}
+.dot{width:9px;height:9px;border-radius:50%;border:1px solid var(--ink-dim);}
+.dot.done{background:var(--blood-bright);border-color:var(--blood-bright);}
+.cam-guide-text{
+  color:var(--ink-dim);letter-spacing:2px;font-size:24px;margin:10px 0 14px;
+}
+.cam-frame{
+  position:relative;
+  width:min(560px, 92vw);
+  height:min(70vh, 720px);
+  background:#050505;
+  overflow:hidden;
+}
+#video{
+  width:100%;height:100%;object-fit:cover;display:block;
+  filter:brightness(.85);
+}
+#video.mirror{transform:scaleX(-1);}
+.stand-guide{
+  position:absolute;left:6%;bottom:8%;z-index:3;
+  color:rgba(255,255,255,.75);font-size:16px;letter-spacing:1px;
+  text-shadow:0 1px 4px rgba(0,0,0,.8);
+  pointer-events:none;line-height:1.5;
+}
+.stand-guide span{font-size:13px;color:rgba(255,255,255,.5);}
+.corner{position:absolute;width:28px;height:28px;border-color:var(--ink);border-style:solid;border-width:0;z-index:3;}
+.corner.tl{top:14px;left:14px;border-top-width:2px;border-left-width:2px;}
+.corner.tr{top:14px;right:14px;border-top-width:2px;border-right-width:2px;}
+.corner.bl{bottom:14px;left:14px;border-bottom-width:2px;border-left-width:2px;}
+.corner.br{bottom:14px;right:14px;border-bottom-width:2px;border-right-width:2px;}
+.countdown-num{
+  position:absolute;z-index:6;font-family:var(--font-display);
+  top:50%;left:50%;transform:translate(-50%,-50%);
+  font-size:140px;color:#fff;text-shadow:0 0 40px rgba(194,34,34,.7);
+  animation:pulse .9s ease;
+}
+@keyframes pulse{0%{transform:translate(-50%,-50%) scale(1.3);opacity:0;}30%{opacity:1;}100%{transform:translate(-50%,-50%) scale(1);opacity:1;}}
+.cam-hint{
+  margin-top:16px;text-align:center;
+  color:var(--ink-dim);letter-spacing:2px;font-size:24px;z-index:5;
+}
+.cam-bottom-row{
+  margin-top:18px;width:100%;max-width:420px;
+  display:flex;align-items:center;justify-content:center;
+}
+.cam-side-icon{
+  background:none;border:none;color:var(--ink-dim);cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;gap:6px;font-size:22px;letter-spacing:1px;
+}
+.icon-circle{
+  width:44px;height:44px;border-radius:50%;border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;font-size:28px;color:var(--ink);
+}
+.shutter-btn{
+  width:74px;height:74px;border-radius:50%;background:#fff;border:5px solid rgba(255,255,255,.25);
+  cursor:pointer;
+}
+.shutter-btn:active{background:#ddd;}
+.flash-layer{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:8;}
+.flash-layer.on{transition:opacity .06s;opacity:1;}
+.flash-layer.off{transition:opacity .35s;opacity:0;}
+
+/* ---------- RESULT ---------- */
+#screen-result{padding:24px;}
+.result-headline{
+  font-family:var(--font-display);font-size:32px;letter-spacing:1px;
+  text-align:center;margin-bottom:2px;
+}
+.result-headline .hl{color:var(--blood-bright);}
+.result-subline{
+  color:var(--ink-dim);font-size:22px;letter-spacing:2px;text-align:center;margin-bottom:18px;
+}
+.result-wrap{display:flex;gap:34px;align-items:center;flex:1;min-height:0;}
+#resultCanvas{
+  max-height:82vh;max-width:44vw;
+  box-shadow:0 0 40px rgba(0,0,0,.6);
+  border:1px solid var(--line);
+}
+.result-side{display:flex;flex-direction:column;gap:18px;width:280px;}
+.frame-color-row{display:flex;gap:10px;}
+.frame-chip{
+  flex:1;text-align:center;padding:12px 0;border:1px solid var(--line);
+  background:var(--panel);font-size:23px;letter-spacing:1px;cursor:pointer;
+}
+.frame-chip.selected{border-color:var(--blood-bright);background:rgba(138,20,20,.25);}
+.result-side h2{font-family:var(--font-display);letter-spacing:3px;font-size:30px;margin:0 0 6px;}
+.side-btn{
+  padding:16px;border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  font-size:24px;letter-spacing:2px;cursor:pointer;text-align:left;
+  display:flex;align-items:center;gap:10px;
+}
+.side-btn:hover{border-color:var(--blood-bright);}
+.side-btn.primary{border-color:var(--blood-bright);background:rgba(138,20,20,.25);}
+#qrBox{background:#fff;padding:10px;display:none;align-self:flex-start;}
+.qr-note{font-size:22px;color:var(--ink-dim);line-height:1.5;}
+.status-msg{font-size:22px;color:var(--ink-dim);min-height:16px;}
+
+@media (max-width:900px){
+  .result-wrap{flex-direction:column;}
+  #resultCanvas{max-width:90vw;max-height:52vh;}
+  .result-side{width:100%;flex-direction:row;flex-wrap:wrap;}
+  #screen-home h1{font-size:clamp(32px, 10vw, 40px);letter-spacing:3px;}
+}
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="vignette"></div>
+<div id="app">
+
+  <!-- ===================== HOME ===================== -->
+  <section id="screen-home" class="screen active">
+    <div class="logo-wrap">
+      <h1 id="homeTitle">인생네컷</h1>
+      <div class="eng" id="homeSubtitle">PHOTO BOOTH</div>
+      <div class="tagline" id="homeTagline">카메라를 향해 서 주세요. 무언가... 함께 찍힐지도 모릅니다.</div>
+    </div>
+    <button class="btn-primary" onclick="goTheme()">촬영 시작하기</button>
+    <div class="crack-hint">화면을 터치하여 시작</div>
+  </section>
+
+  <!-- ===================== THEME / SETTINGS ===================== -->
+  <section id="screen-theme" class="screen">
+    <div class="step-title">테마 선택</div>
+    <div class="step-sub">원하는 테마를 고르거나, 직접 만든 액자 이미지를 업로드하세요</div>
+    <div class="theme-grid" id="themeGrid"></div>
+
+    <div class="step-title">촬영 간격</div>
+    <div class="step-sub">사진 4장이 자동으로 연속 촬영됩니다</div>
+    <div class="interval-row" id="intervalRow"></div>
+
+    <div class="nav-row">
+      <button class="btn-ghost" onclick="goHome()">‹ 처음으로</button>
+      <button class="btn-go" onclick="goCamera()">촬영하러 가기 ›</button>
+    </div>
+  </section>
+
+  <!-- ===================== CAMERA ===================== -->
+  <section id="screen-camera" class="screen">
+    <div class="cam-wrap">
+      <div class="cam-topbar">
+        <div class="cam-topbar-left">
+          <button class="cam-btn" onclick="switchCamera(event)">↺ 카메라 전환</button>
+          <button class="cam-btn" id="flashToggleBtn" onclick="toggleFlash(event)">⚡ 플래시 <span id="flashState">OFF</span></button>
+        </div>
+        <div class="cam-logo" id="camLogo"></div>
+        <div class="shot-dots" id="shotDots"></div>
+      </div>
+
+      <div class="cam-guide-text" id="camGuideText">카메라를 보세요</div>
+
+      <div class="cam-frame">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="stand-guide">◀ 이 안에 서주세요<br><span>오른쪽은 누군가를 위한 자리일지도...</span></div>
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+        <div class="flash-layer" id="flashLayer"></div>
+        <div class="countdown-num" id="countdownNum" style="display:none;"></div>
+      </div>
+
+      <div class="cam-hint" id="camHint">촬영 버튼을 눌러주세요</div>
+      <div class="cam-bottom-row">
+        <button class="shutter-btn" id="shutterBtn" onclick="beginSequenceOnce(event)" aria-label="촬영 시작"></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RESULT ===================== -->
+  <section id="screen-result" class="screen" style="flex-direction:column;">
+    <div class="result-headline" id="resultHeadline"></div>
+    <div class="result-subline" id="resultSubline"></div>
+    <div class="result-wrap">
+      <canvas id="resultCanvas"></canvas>
+      <div class="result-side">
+        <h2 id="resultTitle">완성되었습니다</h2>
+        <div class="frame-color-row">
+          <div class="frame-chip" id="frameChipBlack" onclick="setFrameColor('black')">검정 틀</div>
+          <div class="frame-chip" id="frameChipWhite" onclick="setFrameColor('white')">흰색 틀</div>
+        </div>
+        <button class="side-btn primary" onclick="downloadResult()">⬇ 사진 저장</button>
+        <button class="side-btn" onclick="uploadForQr()">▦ QR로 휴대폰에 저장</button>
+        <div id="qrBox"></div>
+        <div class="status-msg" id="statusMsg"></div>
+        <div class="qr-note">* QR 코드를 스캔하면 사진을 휴대폰으로 받을 수 있어요</div>
+        <button class="side-btn" onclick="retake()">↻ 다시 찍기</button>
+        <button class="side-btn" onclick="goHome()">⌂ 처음으로</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<video id="captureVideoRef" style="display:none;"></video>
+<canvas id="workCanvas" style="display:none;"></canvas>
+
+<script>
+/* ============================================================
+   여기부터 설정(CONFIG). 필요한 부분만 바꿔서 쓰세요.
+   ============================================================ */
+const CONFIG = {
+  appTitle: '틈',
+  appSubtitle: 'CRACK',
+  tagline: '카메라를 향해 서 주세요. 무언가... 함께 찍힐지도 모릅니다.',
+  resultHeadline: '… 잠깐, <span class="hl">옆에</span> 뭔가 있습니다.',
+  resultSubline: '',
+  defaultIntervalSec: 5,
+  intervalOptions: [3, 5, 10],
+
+  // Supabase Storage 설정 (QR 저장 기능을 쓰려면 채워주세요)
+  // 1) Supabase 프로젝트 > Storage 에서 public 버킷 생성 (예: photobooth)
+  // 2) 버킷 정책을 public read 로 설정
+  // 3) 아래 값 입력
+  supabase: {
+    url: 'https://lfipctmzfjakhymumvhe.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxmaXBjdG16Zmpha2h5bXVtdmhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU5MDM3MDYsImV4cCI6MjEwMTQ3OTcwNn0.HIjoMaLEicSUIdGFlD9DnsOricKjJk6uEXooILtPTtI',
+    bucket: 'photobooth'
+  }
+};
+
+// 테마 목록. photoFilter 는 CSS filter 문법 그대로 사용.
+// overlayImage : 사진 한 장 한 장 위에 합성될 이미지(예: 귀신). 투명배경 PNG 권장.
+//                실제 귀신/괴물 사진을 쓰고 싶으면 이미지 URL(https://...)을 넣으면 그 사진이 그대로 합성됩니다.
+// frameImage   : 완성본 전체 위에 덮이는 액자/테두리 이미지(4칸 사진 배치를 대체). 투명배경 PNG 권장.
+//                frameImage를 쓰면 캔버스 규격(아래 CANVAS_W/H, 셀 좌표)에 맞춰 제작해야 정렬이 맞습니다.
+
+// 기본으로 들어있는 귀신 실루엣 (직접 그린 SVG). overlayImage 를 URL로 바꾸면 이건 안 씁니다.
+function buildGhostSVG(){
+  const svg = `
+  <svg xmlns="http://www.w3.org/2000/svg" width="380" height="500" viewBox="0 0 380 500">
+    <defs>
+      <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+        <stop offset="65%" stop-color="#ffffff" stop-opacity="0.6"/>
+        <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="blur"><feGaussianBlur stdDeviation="2.2"/></filter>
+    </defs>
+    <g transform="translate(255,60)">
+      <!-- robe -->
+      <path d="M -55 60
+               C -70 140, -85 230, -60 340
+               C -45 300, -30 320, -15 350
+               C 0 310, 10 330, 25 355
+               C 35 310, 50 330, 60 345
+               C 80 240, 65 130, 40 60
+               C 15 30, -30 30, -55 60 Z"
+            fill="url(#fade)" filter="url(#blur)"/>
+      <!-- head -->
+      <ellipse cx="-8" cy="10" rx="46" ry="55" fill="#f4f4f4" opacity="0.92" filter="url(#blur)"/>
+      <!-- hair strands -->
+      <path d="M -50 -10 C -60 60, -55 130, -65 190" stroke="#0a0a0a" stroke-width="6" fill="none" opacity="0.85"/>
+      <path d="M -30 -30 C -38 60, -35 150, -45 230" stroke="#0a0a0a" stroke-width="5" fill="none" opacity="0.8"/>
+      <path d="M 25 -25 C 34 55, 30 145, 40 220" stroke="#0a0a0a" stroke-width="5" fill="none" opacity="0.8"/>
+      <path d="M 45 -5 C 56 55, 50 120, 60 175" stroke="#0a0a0a" stroke-width="6" fill="none" opacity="0.85"/>
+      <!-- eyes -->
+      <ellipse cx="-25" cy="10" rx="7" ry="10" fill="#050505"/>
+      <ellipse cx="8" cy="10" rx="7" ry="10" fill="#050505"/>
+      <!-- mouth -->
+      <path d="M -18 42 Q -8 55 2 42" stroke="#050505" stroke-width="3" fill="none" opacity="0.8"/>
+    </g>
+  </svg>`;
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+}
+const GHOST_SVG = buildGhostSVG();
+const GHOST_IMG = 'data:image/png;base64,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';  // 실제 업로드된 귀신 사진 (기본값)
+CONFIG.ghostOverlay = GHOST_IMG;
+CONFIG.bloodDecoration = true;
+CONFIG.resultTitleText = '틈';
+CONFIG.resultEnglishText = 'CRACK';
+CONFIG.resultFooterTagline = '틈은 항상 당신 곁에 있습니다';
+
+
+const THEMES = [
+  {
+    id: 'default',
+    name: '실사 컬러',
+    bg: '#0c0a0a',
+    accent: '#c22222',
+    photoFilter: 'none'
+  },
+  {
+    id: 'horror',
+    name: '흑백 공포',
+    bg: '#0c0a0a',
+    accent: '#c22222',
+    photoFilter: 'grayscale(0.85) contrast(1.35) brightness(0.65) saturate(0.6)'
+  },
+  {
+    id: 'redroom',
+    name: '레드 톤',
+    bg: '#160404',
+    accent: '#ff2b2b',
+    photoFilter: 'grayscale(0.5) sepia(0.35) hue-rotate(-40deg) contrast(1.25) brightness(0.75)'
+  }
+];
+
+/* ============================================================
+   설정 끝. 아래는 앱 로직입니다.
+   ============================================================ */
+
+const CANVAS_W = 900, CANVAS_H = 1350;
+const CELL_W = 380, CELL_H = 500;
+const CELL_GAP = 24;
+const GRID_LEFT = (CANVAS_W - (CELL_W*2 + CELL_GAP)) / 2;
+const GRID_TOP = 70;
+
+let customThemes = [];
+let state = {
+  themeIndex: 0,
+  interval: CONFIG.defaultIntervalSec,
+  photos: [],       // {img: HTMLImageElement, ghostSide: 'left'|'right'}
+  stream: null,
+  facingMode: 'user',
+  flashOn: false,
+  frameColor: 'black',   // 'black' | 'white' - 결과 화면에서 선택
+  lastFaceSide: 'right'  // 얼굴 인식으로 갱신되는 "귀신이 서야 할 쪽"
+};
+
+function allThemes(){ return THEMES.concat(customThemes); }
+function currentTheme(){ return allThemes()[state.themeIndex]; }
+
+/* ---------- HOME ---------- */
+document.getElementById('homeTitle').textContent = CONFIG.appTitle;
+document.getElementById('homeSubtitle').textContent = CONFIG.appSubtitle;
+document.getElementById('homeTagline').textContent = CONFIG.tagline;
+
+function goHome(){
+  stopStream();
+  showScreen('screen-home');
+}
+
+/* ---------- THEME SCREEN ---------- */
+const THEME_VISUALS = {
+  default:  { grad: 'linear-gradient(135deg,#3a2f2a,#6b4a3a)', desc: '카메라 원본 색감 그대로' },
+  horror:   { grad: 'linear-gradient(135deg,#1a1a1a,#3a3a3a)', desc: '흑백톤 · 공포 분위기' },
+  redroom:  { grad: 'linear-gradient(135deg,#2a0505,#6b0f0f)', desc: '붉은 톤 · 강렬한 색감' }
+};
+
+function renderThemeGrid(){
+  const grid = document.getElementById('themeGrid');
+  grid.innerHTML = '';
+  allThemes().forEach((t, i) => {
+    const card = document.createElement('div');
+    card.className = 'theme-card' + (i === state.themeIndex ? ' selected' : '');
+    card.onclick = () => { state.themeIndex = i; renderThemeGrid(); };
+    const visual = THEME_VISUALS[t.id] || { grad: 'linear-gradient(135deg,#222,#333)', desc: '커스텀 테마' };
+    const swatch = document.createElement('div');
+    swatch.className = 'theme-swatch';
+    swatch.style.background = visual.grad;
+    if (t.frameImage) {
+      swatch.style.backgroundImage = `url(${t.frameImage})`;
+      swatch.style.backgroundSize = 'cover';
+      swatch.style.backgroundPosition = 'center';
+    }
+    const name = document.createElement('div');
+    name.className = 'theme-name';
+    name.textContent = t.name;
+    const desc = document.createElement('div');
+    desc.className = 'theme-desc';
+    desc.textContent = t.frameImage ? '내가 올린 이미지' : visual.desc;
+    card.appendChild(swatch);
+    card.appendChild(name);
+    card.appendChild(desc);
+    grid.appendChild(card);
+  });
+
+  const uploadCard = document.createElement('div');
+  uploadCard.className = 'theme-card upload';
+  uploadCard.innerHTML = `
+    <div style="font-size:26px;margin-bottom:6px;">＋</div>
+    <div style="font-size:22px;">내 액자 이미지<br>업로드</div>
+    <input type="file" accept="image/png,image/jpeg" id="frameUploadInput">
+  `;
+  uploadCard.onclick = () => document.getElementById('frameUploadInput').click();
+  grid.appendChild(uploadCard);
+
+  document.getElementById('frameUploadInput').addEventListener('change', handleFrameUpload);
+}
+
+function handleFrameUpload(e){
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const dataUrl = ev.target.result;
+    const newTheme = {
+      id: 'custom_' + Date.now(),
+      name: '내 테마 · ' + file.name.slice(0,10),
+      bg: '#0a0a0a',
+      ink: '#ffffff',
+      accent: '#c22222',
+      titleText: '',
+      subText: '',
+      photoFilter: 'none',
+      overlayImage: '',
+      frameImage: dataUrl
+    };
+    customThemes.push(newTheme);
+    state.themeIndex = allThemes().length - 1;
+    renderThemeGrid();
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderIntervalRow(){
+  const row = document.getElementById('intervalRow');
+  row.innerHTML = '';
+  const presetChips = [];
+  CONFIG.intervalOptions.forEach(sec => {
+    const chip = document.createElement('div');
+    chip.className = 'chip' + (state.interval === sec ? ' selected' : '');
+    chip.textContent = sec + '초';
+    chip.onclick = () => { state.interval = sec; renderIntervalRow(); };
+    presetChips.push(chip);
+    row.appendChild(chip);
+  });
+  const customChip = document.createElement('div');
+  customChip.className = 'chip' + (!CONFIG.intervalOptions.includes(state.interval) ? ' selected' : '');
+  customChip.innerHTML = `직접입력 <input type="number" min="1" max="30" id="customIntervalInput" value="${!CONFIG.intervalOptions.includes(state.interval) ? state.interval : ''}" placeholder="초">`;
+  customChip.querySelector('input').addEventListener('input', (e) => {
+    const v = parseInt(e.target.value, 10);
+    if (v > 0) {
+      state.interval = v;
+      // 전체를 다시 그리면 입력 포커스가 풀리므로, 선택 표시만 즉시 토글
+      presetChips.forEach(c => c.classList.remove('selected'));
+      customChip.classList.add('selected');
+    }
+  });
+  customChip.querySelector('input').addEventListener('click', (e) => e.stopPropagation());
+  row.appendChild(customChip);
+}
+
+function goTheme(){
+  renderThemeGrid();
+  renderIntervalRow();
+  showScreen('screen-theme');
+}
+
+/* ---------- CAMERA ---------- */
+async function goCamera(){
+  showScreen('screen-camera');
+  state.photos = [];
+  sequenceStarted = false;
+  renderShotDots();
+  document.getElementById('shutterBtn').disabled = false;
+
+  document.getElementById('camLogo').textContent = CONFIG.appTitle;
+  document.getElementById('camGuideText').textContent = '카메라를 보세요';
+  document.getElementById('camHint').textContent = '촬영 버튼을 눌러주세요';
+
+  // 촬영 중에는 귀신을 보여주지 않습니다 (결과 화면에서만 합성됩니다)
+
+  updateFlashUI();
+  await startStream();
+}
+
+function toggleFlash(e){
+  if (e) e.stopPropagation();
+  state.flashOn = !state.flashOn;
+  updateFlashUI();
+}
+function updateFlashUI(){
+  document.getElementById('flashState').textContent = state.flashOn ? 'ON' : 'OFF';
+}
+function showGuide(e){
+  if (e) e.stopPropagation();
+  alert('카메라를 정면으로 바라보고, 안내선 안에 얼굴이 들어오도록 서주세요.\n촬영 버튼을 누르면 설정한 간격으로 4장이 자동 촬영됩니다.');
+}
+let sequenceStarted = false;
+
+/* ---------- 얼굴 위치 추적 (귀신을 사람 반대쪽에 배치) ---------- */
+let blazefaceModel = null;
+let blazefaceLoading = false;
+let faceTrackTimer = null;
+
+async function ensureFaceModel(){
+  if (blazefaceModel || blazefaceLoading) return;
+  if (typeof blazeface === 'undefined'){
+    console.warn('blazeface 라이브러리를 불러오지 못했습니다. 귀신은 기본 위치(오른쪽)에 나옵니다.');
+    return;
+  }
+  blazefaceLoading = true;
+  try{
+    blazefaceModel = await blazeface.load();
+  }catch(err){
+    console.warn('얼굴 인식 모델 로드 실패, 기본 위치를 사용합니다.', err);
+  }
+  blazefaceLoading = false;
+}
+
+function startFaceTracking(){
+  ensureFaceModel();
+  stopFaceTracking();
+  faceTrackTimer = setInterval(async () => {
+    if (!blazefaceModel) return;
+    const video = document.getElementById('video');
+    if (!video.videoWidth) return;
+    try{
+      const predictions = await blazefaceModel.estimateFaces(video, false);
+      if (predictions && predictions.length > 0){
+        const f = predictions[0];
+        const faceCenterX = (f.topLeft[0] + f.bottomRight[0]) / 2;
+        let normX = faceCenterX / video.videoWidth;
+        // 전면 카메라는 화면이 좌우반전(mirror)되어 보이므로 실제 좌표 기준으로 보정
+        if (state.facingMode === 'user') normX = 1 - normX;
+        // 얼굴이 오른쪽에 있으면 귀신은 왼쪽에, 얼굴이 왼쪽에 있으면 귀신은 오른쪽에
+        state.lastFaceSide = normX > 0.5 ? 'left' : 'right';
+      }
+    }catch(err){ /* 프레임 하나 실패해도 계속 진행 */ }
+  }, 300);
+}
+function stopFaceTracking(){
+  if (faceTrackTimer){ clearInterval(faceTrackTimer); faceTrackTimer = null; }
+}
+function beginSequenceOnce(e){
+  if (e) e.stopPropagation();
+  if (sequenceStarted) return;
+  const video = document.getElementById('video');
+  if (!video.videoWidth || !video.videoHeight){
+    // 카메라 신호가 없어도(예: 카메라 없는 PC에서 테스트) 진행은 가능하게 하고,
+    // 실제 촬영 시 임시 화면으로 대체합니다.
+    document.getElementById('camHint').textContent = '카메라 신호가 없어 테스트 화면으로 진행합니다';
+  }
+  sequenceStarted = true;
+  document.getElementById('shutterBtn').disabled = true;
+  runCaptureSequence();
+}
+
+async function startStream(){
+  stopStream();
+  try{
+    const constraints = { video: { facingMode: state.facingMode }, audio: false };
+    state.stream = await navigator.mediaDevices.getUserMedia(constraints);
+    const video = document.getElementById('video');
+    video.srcObject = state.stream;
+    video.classList.toggle('mirror', state.facingMode === 'user');
+    startFaceTracking();
+  }catch(err){
+    document.getElementById('camHint').textContent = '카메라 접근 권한이 필요합니다: ' + err.message;
+  }
+}
+function stopStream(){
+  if (state.stream){
+    state.stream.getTracks().forEach(t => t.stop());
+    state.stream = null;
+  }
+  stopFaceTracking();
+  sequenceStarted = false;
+}
+function switchCamera(e){
+  if (e) e.stopPropagation();
+  state.facingMode = state.facingMode === 'user' ? 'environment' : 'user';
+  startStream();
+}
+function cancelCamera(e){
+  if (e) e.stopPropagation();
+  goHome();
+}
+
+function renderShotDots(){
+  const wrap = document.getElementById('shotDots');
+  wrap.innerHTML = '';
+  for (let i=0;i<4;i++){
+    const d = document.createElement('div');
+    d.className = 'dot' + (i < state.photos.length ? ' done' : '');
+    wrap.appendChild(d);
+  }
+}
+
+function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+async function runCaptureSequence(){
+  const countEl = document.getElementById('countdownNum');
+  const hint = document.getElementById('camHint');
+  for (let shot = 0; shot < 4; shot++){
+    hint.textContent = `${shot+1} / 4 번째 사진`;
+    for (let s = state.interval; s >= 1; s--){
+      countEl.style.display = 'block';
+      countEl.textContent = s;
+      countEl.style.animation = 'none';
+      void countEl.offsetWidth;
+      countEl.style.animation = 'pulse .9s ease';
+      await sleep(1000);
+    }
+    countEl.style.display = 'none';
+    await capturePhoto();
+    renderShotDots();
+    await sleep(400);
+  }
+  hint.textContent = '완성 중...';
+  await sleep(300);
+  buildResult();
+}
+
+async function capturePhoto(){
+  const flash = document.getElementById('flashLayer');
+  if (state.flashOn) flash.className = 'flash-layer on';
+  const video = document.getElementById('video');
+  const hasSignal = video.videoWidth > 0 && video.videoHeight > 0;
+  const w = video.videoWidth || 720, h = video.videoHeight || 960;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  if (hasSignal){
+    if (state.facingMode === 'user'){
+      ctx.translate(w, 0); ctx.scale(-1, 1);
+    }
+    ctx.drawImage(video, 0, 0, w, h);
+  } else {
+    // 카메라 신호가 없을 때(예: PC 테스트) 빈 화면 대신 보이는 테스트용 placeholder 생성
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, '#3a3532');
+    grad.addColorStop(1, '#161311');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = `${Math.floor(w*0.08)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('TEST', w/2, h/2 - 10);
+    ctx.font = `${Math.floor(w*0.045)}px sans-serif`;
+    ctx.fillText('카메라 신호 없음', w/2, h/2 + 34);
+  }
+  const dataUrl = c.toDataURL('image/png');
+  await sleep(60);
+  if (state.flashOn) flash.className = 'flash-layer off';
+  const img = new Image();
+  await new Promise(res => { img.onload = res; img.src = dataUrl; });
+  state.photos.push({ img, ghostSide: state.lastFaceSide || 'right' });
+}
+
+/* ---------- RESULT ---------- */
+function buildResult(){
+  stopStream();
+  document.getElementById('resultHeadline').innerHTML = CONFIG.resultHeadline;
+  document.getElementById('resultSubline').textContent = CONFIG.resultSubline;
+  document.getElementById('qrBox').style.display = 'none';
+  document.getElementById('qrBox').innerHTML = '';
+  // 테마 기본색을 기준으로 검정/흰색 틀 초기값 지정
+  const theme = currentTheme();
+  state.frameColor = isDarkColor(theme.bg) ? 'black' : 'white';
+  updateFrameChipUI();
+  drawComposite();
+  showScreen('screen-result');
+}
+
+function isDarkColor(hex){
+  if (!hex) return true;
+  const c = hex.replace('#','');
+  const r = parseInt(c.substring(0,2),16), g = parseInt(c.substring(2,4),16), b = parseInt(c.substring(4,6),16);
+  return (r*0.299 + g*0.587 + b*0.114) < 130;
+}
+
+function setFrameColor(color){
+  state.frameColor = color;
+  updateFrameChipUI();
+  drawComposite();
+}
+function updateFrameChipUI(){
+  document.getElementById('frameChipBlack').classList.toggle('selected', state.frameColor === 'black');
+  document.getElementById('frameChipWhite').classList.toggle('selected', state.frameColor === 'white');
+}
+
+const FRAME_PALETTES = {
+  black: { bg: '#0c0a0a', ink: '#efe7e2' },
+  white: { bg: '#f5f2ec', ink: '#1a1a1a' }
+};
+
+function drawComposite(){
+  resultReady = false;
+  document.getElementById('statusMsg').textContent = '합성 중...';
+  const theme = currentTheme();
+  const palette = FRAME_PALETTES[state.frameColor] || FRAME_PALETTES.black;
+  const canvas = document.getElementById('resultCanvas');
+  canvas.width = CANVAS_W; canvas.height = CANVAS_H;
+  const ctx = canvas.getContext('2d');
+
+  // background
+  ctx.fillStyle = palette.bg;
+  ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+  // 혈흔 장식
+  if (CONFIG.bloodDecoration){
+    drawBloodSplatter(ctx, theme.accent || '#8a1414');
+  }
+
+  // 4 photo cells
+  const positions = [
+    [GRID_LEFT, GRID_TOP],
+    [GRID_LEFT + CELL_W + CELL_GAP, GRID_TOP],
+    [GRID_LEFT, GRID_TOP + CELL_H + CELL_GAP],
+    [GRID_LEFT + CELL_W + CELL_GAP, GRID_TOP + CELL_H + CELL_GAP],
+  ];
+
+  // 사진 칸은 프레임 색상(검정/흰색)과 무관하게 항상 어두운 배경을 깔아서
+  // 카드 테두리만 바뀌고, 칸 안쪽 분위기와 귀신은 항상 그대로 보이게 합니다.
+  const CELL_BACKDROP = '#0e0c0c';
+  positions.forEach(([x, y]) => {
+    ctx.fillStyle = CELL_BACKDROP;
+    ctx.fillRect(x, y, CELL_W, CELL_H);
+  });
+
+  state.photos.forEach((p, i) => {
+    const [x, y] = positions[i];
+    drawFilteredPhoto(ctx, p.img, x, y, CELL_W, CELL_H, theme.photoFilter);
+  });
+
+  // 귀신은 결과 사진에만 합성 (촬영 중에는 보이지 않음)
+  const finishComposite = () => drawFooterAndFrame(ctx, palette, theme);
+
+  if (CONFIG.ghostOverlay){
+    loadImage(CONFIG.ghostOverlay).then(ov => {
+      positions.forEach(([x, y], i) => {
+        const side = (state.photos[i] && state.photos[i].ghostSide) || 'right';
+        drawGhostOverlay(ctx, ov, x, y, CELL_W, CELL_H, side);
+      });
+      finishComposite();
+    }).catch(finishComposite);
+  } else {
+    finishComposite();
+  }
+}
+
+// 상단/모서리에 은은한 핏자국 장식을 그립니다 (사진 영역은 침범하지 않음)
+function drawBloodSplatter(ctx, color){
+  ctx.save();
+
+  // 시드 기반 의사난수 (매번 같은 느낌이 재현되도록)
+  let seed = 42;
+  function rnd(){
+    seed = (seed * 9301 + 49297) % 233280;
+    return seed / 233280;
+  }
+
+  const dark = '#4a0808';
+  const mid = color || '#8a1414';
+  const bright = '#d43a2a';
+
+  // 불규칙한 손그림 느낌의 얼룩 (radial gradient + 울퉁불퉁한 외곽선)
+  function splatBlot(cx, cy, r, alpha){
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const grad = ctx.createRadialGradient(cx - r*0.2, cy - r*0.2, r*0.1, cx, cy, r*1.15);
+    grad.addColorStop(0, dark);
+    grad.addColorStop(0.55, mid);
+    grad.addColorStop(1, 'rgba(138,20,20,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    const pts = 10 + Math.floor(rnd()*4);
+    for (let i = 0; i <= pts; i++){
+      const a = (i / pts) * Math.PI * 2;
+      const wobble = 0.5 + rnd()*0.7;
+      const rr = r * wobble;
+      const px = cx + Math.cos(a) * rr;
+      const py = cy + Math.sin(a) * rr * (0.85 + rnd()*0.3);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 튀는 방향으로 뻗어나가는 가는 튐 자국
+  function splatTail(cx, cy, angle, len, w){
+    ctx.save();
+    ctx.globalAlpha = 0.6 + rnd()*0.25;
+    ctx.fillStyle = mid;
+    const ex = cx + Math.cos(angle) * len;
+    const ey = cy + Math.sin(angle) * len;
+    const nx = -Math.sin(angle), ny = Math.cos(angle);
+    ctx.beginPath();
+    ctx.moveTo(cx + nx*w, cy + ny*w);
+    ctx.quadraticCurveTo(cx + Math.cos(angle)*len*0.5 + nx*w*0.3, cy + Math.sin(angle)*len*0.5 + ny*w*0.3, ex, ey);
+    ctx.quadraticCurveTo(cx + Math.cos(angle)*len*0.5 - nx*w*0.3, cy + Math.sin(angle)*len*0.5 - ny*w*0.3, cx - nx*w, cy - ny*w);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(ex, ey, w*0.6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // 미세 스프레이(먼지처럼 흩뿌려진 작은 점들)
+  function mist(cx, cy, spread, count){
+    ctx.fillStyle = mid;
+    for (let i = 0; i < count; i++){
+      const a = rnd() * Math.PI * 2;
+      const d = Math.pow(rnd(), 0.6) * spread; // 중심에 더 많이 몰리게
+      const px = cx + Math.cos(a) * d;
+      const py = cy + Math.sin(a) * d * 0.85;
+      const closeness = 1 - Math.min(d / spread, 1);
+      const r = 0.6 + closeness * (2.5 + rnd()*4) + rnd()*1.2;
+      ctx.globalAlpha = 0.35 + rnd()*0.5;
+      ctx.beginPath();
+      ctx.arc(px, py, r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    // 멀리 튄 독립된 큰 방울 몇 개
+    for (let i = 0; i < 4; i++){
+      const a = rnd() * Math.PI * 2;
+      const d = spread * (0.8 + rnd()*0.9);
+      const px = cx + Math.cos(a) * d;
+      const py = cy + Math.sin(a) * d * 0.85;
+      ctx.globalAlpha = 0.55 + rnd()*0.3;
+      ctx.beginPath();
+      ctx.arc(px, py, 3 + rnd()*4, 0, Math.PI*2);
+      ctx.fill();
+    }
+  }
+
+  // 흘러내리는 핏줄기
+  function drip(cx, topY, w, len){
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = mid;
+    ctx.beginPath();
+    ctx.moveTo(cx - w/2, topY);
+    ctx.quadraticCurveTo(cx - w*0.35, topY + len*0.4, cx - w*0.12, topY + len*0.75);
+    ctx.quadraticCurveTo(cx - w*0.04, topY + len*0.94, cx, topY + len);
+    ctx.quadraticCurveTo(cx + w*0.04, topY + len*0.94, cx + w*0.12, topY + len*0.75);
+    ctx.quadraticCurveTo(cx + w*0.35, topY + len*0.4, cx + w/2, topY);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx + (rnd()-0.5)*6, topY + len + 8 + rnd()*6, w*0.28, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  const corners = [
+    { x: 26,          y: 24,          dir: -0.9 },
+    { x: CANVAS_W-24, y: 30,          dir: -2.2 },
+    { x: 22,          y: CANVAS_H-26, dir: 0.9 },
+    { x: CANVAS_W-26, y: CANVAS_H-22, dir: 2.2 }
+  ];
+
+  corners.forEach(c => {
+    const r = 26 + rnd()*14;
+    splatBlot(c.x, c.y, r, 0.9);
+    for (let i = 0; i < 3 + Math.floor(rnd()*2); i++){
+      const angle = c.dir + (rnd()-0.5)*1.4;
+      splatTail(c.x, c.y, angle, 30 + rnd()*70, 3 + rnd()*4);
+    }
+    mist(c.x, c.y, 120, 70);
+  });
+
+  // 상단에서 흘러내리는 핏줄기 몇 가닥
+  drip(70, 0, 13, 66 + rnd()*20);
+  drip(150, 0, 7, 34 + rnd()*14);
+  drip(CANVAS_W - 90, 0, 16, 80 + rnd()*24);
+  drip(CANVAS_W - 205, 0, 8, 40 + rnd()*16);
+
+  // 화면 전체에 흩어진 미세 튐
+  ctx.fillStyle = mid;
+  for (let i = 0; i < 30; i++){
+    const x = rnd() * CANVAS_W;
+    const y = rnd() * 70;
+    ctx.globalAlpha = 0.2 + rnd()*0.35;
+    ctx.beginPath();
+    ctx.arc(x, y, 0.8 + rnd()*2, 0, Math.PI*2);
+    ctx.fill();
+  }
+  for (let i = 0; i < 20; i++){
+    const x = rnd() * CANVAS_W;
+    const y = CANVAS_H - rnd() * 60;
+    ctx.globalAlpha = 0.2 + rnd()*0.35;
+    ctx.beginPath();
+    ctx.arc(x, y, 0.8 + rnd()*1.8, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function loadImage(src){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    // data: URI 나 base64 이미지는 crossOrigin을 지정하면 일부 모바일 브라우저에서
+    // 캔버스가 "오염(tainted)"되어 저장이 실패하는 원인이 되므로 지정하지 않습니다.
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// 귀신 사진을 사진 오른쪽 편에 자연스럽게 합성 (screen 블렌드로 어두운 배경은 투명하게)
+function drawGhostOverlay(ctx, ghostImg, x, y, w, h, side){
+  const gw = w * 0.5;
+  const gh = gw * (ghostImg.height / ghostImg.width);
+  const finalH = Math.min(gh, h * 0.92);
+  const finalW = finalH * (ghostImg.width / ghostImg.height);
+  const gy = y + h - finalH;
+  const gx = side === 'left' ? (x + w * 0.03) : (x + w - finalW - w * 0.03);
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
+  ctx.globalAlpha = 0.95;
+  ctx.drawImage(ghostImg, gx, gy, finalW, finalH);
+  ctx.restore();
+}
+
+function drawFilteredPhoto(ctx, img, x, y, w, h, filterStr){
+  const off = document.createElement('canvas');
+  off.width = w; off.height = h;
+  const octx = off.getContext('2d');
+  // cover-fit crop
+  const scale = Math.max(w / img.width, h / img.height);
+  const sw = w / scale, sh = h / scale;
+  const sx = (img.width - sw) / 2, sy = (img.height - sh) / 2;
+  if (filterStr && filterStr !== 'none') octx.filter = filterStr;
+  octx.drawImage(img, sx, sy, sw, sh, 0, 0, w, h);
+  ctx.drawImage(off, x, y);
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+  ctx.strokeRect(x, y, w, h);
+}
+
+function drawFooterAndFrame(ctx, palette, theme){
+  const footerCenterY = GRID_TOP + CELL_H*2 + CELL_GAP + 74;
+
+  // 로고
+  ctx.fillStyle = palette.ink;
+  ctx.textAlign = 'center';
+  ctx.font = '700 63px "Noto Serif KR", serif';
+  ctx.fillText(CONFIG.resultTitleText || '', CANVAS_W/2, footerCenterY);
+
+  // 서브 텍스트 (영문)
+  ctx.font = '600 20px sans-serif';
+  ctx.fillStyle = (theme.accent || '#888');
+  ctx.fillText(CONFIG.resultEnglishText || '', CANVAS_W/2, footerCenterY + 34);
+
+  // 태그라인
+  if (CONFIG.resultFooterTagline){
+    ctx.font = '400 27px "Noto Serif KR", serif';
+    ctx.fillStyle = palette.ink;
+    ctx.globalAlpha = 0.9;
+    ctx.fillText(CONFIG.resultFooterTagline, CANVAS_W/2, footerCenterY + 74);
+    ctx.globalAlpha = 1;
+  }
+
+  // 날짜 (오늘 날짜로 매번 새로 그려집니다)
+  ctx.fillStyle = theme.accent || '#c22222';
+  ctx.font = '600 26px sans-serif';
+  ctx.globalAlpha = 0.8;
+  ctx.fillText(new Date().toLocaleDateString('ko-KR'), CANVAS_W/2, CANVAS_H - 32);
+  ctx.globalAlpha = 1;
+
+  const finish = () => { resultReady = true; document.getElementById('statusMsg').textContent = ''; };
+
+  if (theme.frameImage){
+    loadImage(theme.frameImage).then(fi => {
+      ctx.drawImage(fi, 0, 0, CANVAS_W, CANVAS_H);
+      finish();
+    }).catch(finish);
+  } else {
+    finish();
+  }
+}
+
+let resultReady = false;
+
+function downloadResult(){
+  const statusEl = document.getElementById('statusMsg');
+  if (!resultReady){
+    statusEl.textContent = '사진을 합성하는 중이에요. 잠시만 기다려주세요...';
+    setTimeout(downloadResult, 400);
+    return;
+  }
+  const canvas = document.getElementById('resultCanvas');
+  try{
+    canvas.toBlob((blob) => {
+      if (!blob){
+        statusEl.textContent = '저장에 실패했어요. 다시 시도해주세요.';
+        return;
+      }
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.download = `photobooth_${Date.now()}.png`;
+      link.href = blobUrl;
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 4000);
+      statusEl.textContent = '저장되었습니다.';
+    }, 'image/png');
+  }catch(err){
+    statusEl.textContent = '저장 실패: ' + err.message;
+  }
+}
+
+async function uploadForQr(){
+  const statusEl = document.getElementById('statusMsg');
+  if (!resultReady){
+    statusEl.textContent = '사진을 합성하는 중이에요. 잠시 후 다시 눌러주세요...';
+    setTimeout(uploadForQr, 400);
+    return;
+  }
+  const { url, anonKey, bucket } = CONFIG.supabase;
+  if (!url || !anonKey){
+    statusEl.textContent = 'Supabase 설정이 필요합니다 (CONFIG.supabase 를 채워주세요). 지금은 "사진 저장"만 이용해주세요.';
+    return;
+  }
+  statusEl.textContent = '업로드 중...';
+  const canvas = document.getElementById('resultCanvas');
+  canvas.toBlob(async (blob) => {
+    try{
+      const filename = `photo_${Date.now()}.png`;
+      const res = await fetch(`${url}/storage/v1/object/${bucket}/${filename}`, {
+        method: 'POST',
+        headers: {
+          'apikey': anonKey,
+          'Authorization': `Bearer ${anonKey}`,
+          'Content-Type': 'image/png'
+        },
+        body: blob
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const publicUrl = `${url}/storage/v1/object/public/${bucket}/${filename}`;
+      const qrBox = document.getElementById('qrBox');
+      qrBox.innerHTML = '';
+      qrBox.style.display = 'block';
+      new QRCode(qrBox, { text: publicUrl, width: 180, height: 180 });
+      statusEl.textContent = 'QR코드를 스캔해서 사진을 받아가세요!';
+    }catch(err){
+      statusEl.textContent = '업로드 실패: ' + err.message;
+    }
+  }, 'image/png');
+}
+
+function retake(){
+  state.photos = [];
+  goCamera();
+}
+
+/* ---------- SCREEN HELPER ---------- */
+function showScreen(id){
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+</script>
+</body>
+</html>
