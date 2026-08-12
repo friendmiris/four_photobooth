@@ -738,10 +738,23 @@ function startFaceTracking(){
       const predictions = await blazefaceModel.estimateFaces(video, false);
       if (predictions && predictions.length > 0){
         const f = predictions[0];
-        const faceCenterX = (f.topLeft[0] + f.bottomRight[0]) / 2;
-        let normX = faceCenterX / video.videoWidth;
+        let faceCenterX = (f.topLeft[0] + f.bottomRight[0]) / 2;
         // 전면 카메라는 화면이 좌우반전(mirror)되어 보이므로 실제 좌표 기준으로 보정
-        if (state.facingMode === 'user') normX = 1 - normX;
+        if (state.facingMode === 'user') faceCenterX = video.videoWidth - faceCenterX;
+
+        // 결과 사진은 세로 칸(cell) 비율에 맞춰 좌우를 크게 잘라내므로(특히 가로로 찍을 때),
+        // 원본 전체가 아니라 "실제로 잘려서 최종 사진에 남는 영역" 기준으로 얼굴 위치를 계산합니다.
+        const cellAspect = CELL_W / CELL_H;
+        const videoAspect = video.videoWidth / video.videoHeight;
+        let visibleLeft = 0, visibleWidth = video.videoWidth;
+        if (videoAspect > cellAspect){
+          // 화면이 칸보다 옆으로 넓다 → 좌우가 잘려서 가운데만 남는다
+          visibleWidth = video.videoHeight * cellAspect;
+          visibleLeft = (video.videoWidth - visibleWidth) / 2;
+        }
+        let normX = (faceCenterX - visibleLeft) / visibleWidth;
+        normX = Math.max(0, Math.min(1, normX));
+
         // 얼굴이 오른쪽에 있으면 귀신은 왼쪽에, 얼굴이 왼쪽에 있으면 귀신은 오른쪽에
         state.lastFaceSide = normX > 0.5 ? 'left' : 'right';
       }
