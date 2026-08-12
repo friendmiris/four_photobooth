@@ -101,12 +101,13 @@ html,body{
 }
 
 /* ---------- THEME / SETTINGS ---------- */
-#screen-theme{align-items:stretch;justify-content:flex-start;padding:40px;}
+#screen-theme{align-items:stretch;justify-content:flex-start;padding:40px;overflow-y:auto;}
 .step-title{font-family:var(--font-display);font-size:32px;letter-spacing:3px;margin-bottom:4px;}
 .step-sub{color:var(--ink-dim);font-size:23px;margin-bottom:22px;letter-spacing:1px;}
 .theme-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
-  gap:16px;margin-bottom:30px;max-height:38vh;overflow-y:auto;padding:4px;
+  gap:16px;margin-bottom:30px;padding:4px;
+  flex-shrink:0;
 }
 .theme-card{
   border:2px solid var(--line);
@@ -264,6 +265,37 @@ html,body{
 }
 @media (max-width:640px){
   .result-side{flex-direction:column;}
+}
+/* ---------- 폰 화면에서는 글씨를 다시 작게 (태블릿 대비 축소) ---------- */
+@media (max-width:480px){
+  #screen-home h1{font-size:clamp(32px, 11vw, 44px);}
+  #screen-home .eng{font-size:15px;letter-spacing:6px;}
+  #screen-home .tagline{font-size:16px;}
+  .btn-primary{font-size:20px;padding:14px 40px;}
+  .crack-hint{font-size:13px;}
+
+  .step-title{font-size:22px;}
+  .step-sub{font-size:14px;margin-bottom:14px;}
+  .theme-name{font-size:16px;}
+  .theme-desc{font-size:11px;}
+  .theme-swatch{height:64px;}
+  .chip{font-size:14px;padding:10px 16px;}
+  .btn-ghost{font-size:13px;padding:12px 20px;}
+  .btn-go{font-size:14px;padding:12px 26px;}
+
+  .cam-btn{font-size:13px;padding:7px 10px;}
+  .cam-guide-text{font-size:15px;}
+  .cam-hint{font-size:14px;}
+  .stand-guide{font-size:12px;}
+  .stand-guide span{font-size:10px;}
+
+  .result-headline{font-size:19px;}
+  .result-subline{font-size:13px;}
+  .result-side h2{font-size:19px;}
+  .frame-chip{font-size:14px;padding:10px 0;}
+  .side-btn{font-size:15px;padding:12px;}
+  .qr-note{font-size:12px;}
+  .status-msg{font-size:12px;}
 }
 </style>
 </head>
@@ -628,6 +660,51 @@ function showGuide(e){
   if (e) e.stopPropagation();
   alert('카메라를 정면으로 바라보고, 안내선 안에 얼굴이 들어오도록 서주세요.\n촬영 버튼을 누르면 설정한 간격으로 4장이 자동 촬영됩니다.');
 }
+/* ---------- 촬영 셔터음 (외부 파일 없이 즉석에서 합성) ---------- */
+let audioCtx = null;
+function ensureAudioCtx(){
+  try{
+    if (!audioCtx){
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }catch(err){ /* 오디오를 지원하지 않는 환경이면 그냥 무음으로 진행 */ }
+  return audioCtx;
+}
+function playShutterSound(){
+  const ctx = ensureAudioCtx();
+  if (!ctx) return;
+  try{
+    const now = ctx.currentTime;
+
+    // 짧은 노이즈 버스트 (찰칵 소리의 몸통)
+    const bufferSize = Math.floor(ctx.sampleRate * 0.05);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++){
+      data[i] = (Math.random()*2 - 1) * Math.pow(1 - i/bufferSize, 2);
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.5, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+    noise.connect(noiseGain).connect(ctx.destination);
+    noise.start(now);
+
+    // 짧은 클릭 톤 (셔터의 '딸깍'하는 금속성 느낌)
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1800, now);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.18, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.03);
+    osc.connect(oscGain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.04);
+  }catch(err){ /* 소리 재생에 실패해도 촬영 자체는 계속 진행 */ }
+}
+
 let sequenceStarted = false;
 
 /* ---------- 얼굴 위치 추적 (귀신을 사람 반대쪽에 배치) ---------- */
@@ -677,6 +754,7 @@ function stopFaceTracking(){
 function beginSequenceOnce(e){
   if (e) e.stopPropagation();
   if (sequenceStarted) return;
+  ensureAudioCtx(); // 사용자 터치 시점에 오디오 컨텍스트를 미리 준비(브라우저 자동재생 제한 회피)
   const video = document.getElementById('video');
   if (!video.videoWidth || !video.videoHeight){
     // 카메라 신호가 없어도(예: 카메라 없는 PC에서 테스트) 진행은 가능하게 하고,
@@ -757,6 +835,7 @@ async function runCaptureSequence(){
 async function capturePhoto(){
   const flash = document.getElementById('flashLayer');
   if (state.flashOn) flash.className = 'flash-layer on';
+  playShutterSound();
   const video = document.getElementById('video');
   const hasSignal = video.videoWidth > 0 && video.videoHeight > 0;
   const w = video.videoWidth || 720, h = video.videoHeight || 960;
@@ -870,7 +949,7 @@ function drawComposite(){
   const finishComposite = () => drawFooterAndFrame(ctx, palette, theme);
 
   if (CONFIG.ghostOverlay){
-    loadImage(CONFIG.ghostOverlay).then(ov => {
+    getGhostCutout().then(ov => {
       positions.forEach(([x, y], i) => {
         const side = (state.photos[i] && state.photos[i].ghostSide) || 'right';
         drawGhostOverlay(ctx, ov, x, y, CELL_W, CELL_H, side);
@@ -1044,8 +1123,49 @@ function loadImage(src){
   });
 }
 
-// 귀신 사진을 사진 오른쪽 편에 자연스럽게 합성 (screen 블렌드로 어두운 배경은 투명하게)
-function drawGhostOverlay(ctx, ghostImg, x, y, w, h, side){
+// 귀신 원본 사진은 배경이 그냥 "검은색"이라 투명 배경이 아닙니다.
+// 밝기(luminance) 기준으로 어두운 부분은 투명하게, 밝은(귀신) 부분은 그대로 보이게
+// 실제 알파 채널을 새로 만들어줘서, 밝은 배경 사진 위에서도 귀신이 씻겨 나가지 않고 항상 보이게 합니다.
+let ghostCutoutCache = null;
+function getGhostCutout(){
+  if (ghostCutoutCache) return Promise.resolve(ghostCutoutCache);
+  return loadImage(CONFIG.ghostOverlay).then(img => {
+    const c = document.createElement('canvas');
+    c.width = img.width; c.height = img.height;
+    const cctx = c.getContext('2d');
+    cctx.drawImage(img, 0, 0);
+    try{
+      const data = cctx.getImageData(0, 0, c.width, c.height);
+      const px = data.data;
+      // 귀신 원본 사진은 전체적으로 매우 어두운 사진이라(가장 밝은 픽셀도 채 100이 안 됨),
+      // 실제 밝기 범위에 맞춰 기준을 낮추고, 살아남은 픽셀은 밝게 보정해서 또렷하게 보이게 합니다.
+      const blackPoint = 10, whitePoint = 55;
+      const boost = 2.6; // 어두운 원본을 밝게 보정하는 배율
+      for (let i = 0; i < px.length; i += 4){
+        const lum = px[i]*0.299 + px[i+1]*0.587 + px[i+2]*0.114;
+        let alpha = (lum - blackPoint) / (whitePoint - blackPoint);
+        alpha = Math.max(0, Math.min(1, alpha));
+        px[i+3] = Math.round(alpha * 255);
+        px[i]   = Math.min(255, px[i]   * boost);
+        px[i+1] = Math.min(255, px[i+1] * boost);
+        px[i+2] = Math.min(255, px[i+2] * boost);
+      }
+      cctx.putImageData(data, 0, 0);
+      ghostCutoutCache = { img: c, mode: 'source-over' };
+    }catch(err){
+      // file:// 로 직접 열었거나 브라우저 보안 정책으로 픽셀 읽기가 막힌 경우:
+      // 투명 처리는 포기하고, 예전 방식(screen 블렌드)으로라도 귀신이 보이게 합니다.
+      console.warn('귀신 투명 처리를 할 수 없어 대체 방식으로 표시합니다.', err);
+      ghostCutoutCache = { img: img, mode: 'screen' };
+    }
+    return ghostCutoutCache;
+  });
+}
+
+// 귀신 사진을 사진 편에 자연스럽게 합성 (투명 배경 처리된 컷아웃을 일반 알파 합성으로 그려서
+// 배경이 밝든 어둡든 항상 또렷하게 보이게 합니다)
+function drawGhostOverlay(ctx, ghostObj, x, y, w, h, side){
+  const ghostImg = ghostObj.img;
   const gw = w * 0.5;
   const gh = gw * (ghostImg.height / ghostImg.width);
   const finalH = Math.min(gh, h * 0.92);
@@ -1053,8 +1173,8 @@ function drawGhostOverlay(ctx, ghostImg, x, y, w, h, side){
   const gy = y + h - finalH;
   const gx = side === 'left' ? (x + w * 0.03) : (x + w - finalW - w * 0.03);
   ctx.save();
-  ctx.globalCompositeOperation = 'screen';
-  ctx.globalAlpha = 0.95;
+  ctx.globalCompositeOperation = ghostObj.mode || 'source-over';
+  ctx.globalAlpha = ghostObj.mode === 'screen' ? 0.95 : 0.92;
   ctx.drawImage(ghostImg, gx, gy, finalW, finalH);
   ctx.restore();
 }
