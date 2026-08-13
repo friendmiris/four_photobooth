@@ -8,6 +8,8 @@
 <!-- 사람 위치를 인식해서 귀신을 반대쪽에 배치하기 위한 얼굴 인식 라이브러리 -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js"></script>
+<!-- 사람 실루엣만 따로 잘라내서 귀신 "뒤에" 있는 것처럼 보이게 하기 위한 인물 세그멘테이션 모델 -->
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0/dist/body-pix.min.js"></script>
 <style>
 /* ============================================================
    설정(CONFIG)은 이 파일 하단 스크립트 안의 CONFIG, THEMES 객체에서
@@ -727,6 +729,56 @@ async function ensureFaceModel(){
   blazefaceLoading = false;
 }
 
+/* ---------- 인물 세그멘테이션 (귀신이 사람 뒤에 가려지게) ---------- */
+let bodyPixModel = null;
+let bodyPixLoading = false;
+async function ensureBodyPixModel(){
+  if (bodyPixModel || bodyPixLoading) return;
+  if (typeof bodyPix === 'undefined'){
+    console.warn('body-pix 라이브러리를 불러오지 못했습니다. 귀신이 사람 앞에 그대로 보일 수 있어요.');
+    return;
+  }
+  bodyPixLoading = true;
+  try{
+    bodyPixModel = await bodyPix.load({
+      architecture: 'MobileNetV1',
+      outputStride: 16,
+      multiplier: 0.75,
+      quantBytes: 2
+    });
+  }catch(err){
+    console.warn('인물 인식 모델 로드 실패.', err);
+  }
+  bodyPixLoading = false;
+}
+
+// 캡처된 원본 캔버스(c)에서 사람 부분만 잘라낸 "투명 배경 사람 컷아웃" 캔버스를 만듭니다.
+async function extractPersonCutout(sourceCanvas){
+  if (!bodyPixModel) return null;
+  try{
+    const segmentation = await bodyPixModel.segmentPerson(sourceCanvas, {
+      internalResolution: 'medium',
+      segmentationThreshold: 0.65
+    });
+    const out = document.createElement('canvas');
+    out.width = sourceCanvas.width; out.height = sourceCanvas.height;
+    const octx = out.getContext('2d');
+    octx.drawImage(sourceCanvas, 0, 0);
+    const imgData = octx.getImageData(0, 0, out.width, out.height);
+    const px = imgData.data;
+    for (let i = 0; i < segmentation.data.length; i++){
+      if (segmentation.data[i] === 0){
+        px[i*4 + 3] = 0; // 사람이 아닌 부분은 투명 처리
+      }
+    }
+    octx.putImageData(imgData, 0, 0);
+    return out;
+  }catch(err){
+    console.warn('인물 컷아웃 생성 실패, 귀신이 사람 앞에 나올 수 있어요.', err);
+    return null;
+  }
+}
+
 function startFaceTracking(){
   ensureFaceModel();
   stopFaceTracking();
@@ -788,6 +840,7 @@ async function startStream(){
     video.srcObject = state.stream;
     video.classList.toggle('mirror', state.facingMode === 'user');
     startFaceTracking();
+    ensureBodyPixModel();
   }catch(err){
     document.getElementById('camHint').textContent = '카메라 접근 권한이 필요합니다: ' + err.message;
   }
@@ -879,7 +932,14 @@ async function capturePhoto(){
   if (state.flashOn) flash.className = 'flash-layer off';
   const img = new Image();
   await new Promise(res => { img.onload = res; img.src = dataUrl; });
-  state.photos.push({ img, ghostSide: state.lastFaceSide || 'right' });
+
+  // 사람 실루엣만 잘라둡니다 (카메라 신호가 있을 때만 — 테스트 화면에는 사람이 없으니 생략)
+  let personCutout = null;
+  if (hasSignal){
+    personCutout = await extractPersonCutout(c);
+  }
+
+  state.photos.push({ img, ghostSide: state.lastFaceSide || 'right', personCutout });
 }
 
 /* ---------- RESULT ---------- */
@@ -966,6 +1026,14 @@ function drawComposite(){
       positions.forEach(([x, y], i) => {
         const side = (state.photos[i] && state.photos[i].ghostSide) || 'right';
         drawGhostOverlay(ctx, ov, x, y, CELL_W, CELL_H, side);
+      });
+      // 귀신을 그린 "다음"에 사람 실루엣을 다시 덮어 그려서,
+      // 사람이 귀신 앞을 자연스럽게 가리는(=귀신이 사람 뒤에 있는) 효과를 만듭니다.
+      positions.forEach(([x, y], i) => {
+        const p = state.photos[i];
+        if (p && p.personCutout){
+          drawFilteredPhoto(ctx, p.personCutout, x, y, CELL_W, CELL_H, theme.photoFilter);
+        }
       });
       finishComposite();
     }).catch(finishComposite);
@@ -1143,10 +1211,22 @@ let ghostCutoutCache = null;
 function getGhostCutout(){
   if (ghostCutoutCache) return Promise.resolve(ghostCutoutCache);
   return loadImage(CONFIG.ghostOverlay).then(img => {
-    const c = document.createElement('canvas');
-    c.width = img.width; c.height = img.height;
-    const cctx = c.getContext('2d');
-    cctx.drawImage(img, 0, 0);
+    // 원본이 88x166짜리 아주 작은 사진이라, 그냥 확대하면 화질이 깨져 보입니다.
+    // 1) 부드러운 보간으로 몇 배 키운 다음
+    // 2) 살짝 블러를 줘서 압축 노이즈/블록 현상을 죽이고
+    // 3) 그 다음에 밝기 보정을 적용해서, 커진 상태에서도 매끈하게 보이도록 합니다.
+    const SCALE = 4;
+    const bigW = img.width * SCALE, bigH = img.height * SCALE;
+    const big = document.createElement('canvas');
+    big.width = bigW; big.height = bigH;
+    const bctx = big.getContext('2d');
+    bctx.imageSmoothingEnabled = true;
+    bctx.imageSmoothingQuality = 'high';
+    bctx.filter = 'blur(2.5px)'; // 업스케일 + 노이즈 완화
+    bctx.drawImage(img, 0, 0, bigW, bigH);
+
+    const c = big;
+    const cctx = bctx;
     try{
       const data = cctx.getImageData(0, 0, c.width, c.height);
       const px = data.data;
@@ -1187,6 +1267,8 @@ function drawGhostOverlay(ctx, ghostObj, x, y, w, h, side){
   const gy = y + h - finalH;
   const gx = side === 'left' ? (x + w * 0.02) : (x + w - finalW - w * 0.02);
   ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   ctx.globalCompositeOperation = ghostObj.mode || 'source-over';
   if (ghostObj.mode !== 'screen'){
     // 어떤 배경(밝든 어둡든) 위에서도 도드라지도록 진한 그림자 테두리 + 대비 보정
