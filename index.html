@@ -315,7 +315,7 @@ html,body{
     </div>
     <button class="btn-primary" onclick="goTheme()">촬영 시작하기</button>
     <div class="crack-hint">화면을 터치하여 시작</div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-13-v16</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-13-v17</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -893,7 +893,7 @@ function beginSequenceOnce(e){
   if (isPhysicallyLandscape && !videoIsLandscapeShaped){
     // 어느 쪽으로 눕혔는지: 센서 값이 있으면 그 부호로, 없으면 화면 각도로 판단
     if (tiltListenerAttached){
-      rotateAngle = gamma > 0 ? 90 : 270;
+      rotateAngle = gamma > 0 ? 270 : 90;
     } else {
       rotateAngle = getOrientationAngle() || 90;
     }
@@ -1330,7 +1330,7 @@ function getGhostCutout(){
       // 어떤 배경 위에서도 강하고 짙게 보이도록 합니다. (머리카락처럼 어둡고 가는 디테일도
       // 살리기 위해 밝기 상한을 낮게 잡고, 감마 보정으로 중간 밝기도 더 잘 보이게 합니다)
       const blackPoint = 5, whitePoint = 30, gamma = 0.55;
-      const boost = 4.6;
+      const boost = 1.9; // 너무 세게 밝히면 머리카락까지 하얗게 날아가서, 어두운 부분은 어둡게 유지
       for (let i = 0; i < px.length; i += 4){
         const lum = px[i]*0.299 + px[i+1]*0.587 + px[i+2]*0.114;
         let alpha = (lum - blackPoint) / (whitePoint - blackPoint);
@@ -1369,7 +1369,9 @@ function drawGhostOverlay(ctx, ghostObj, x, y, w, h, side){
   ctx.globalCompositeOperation = ghostObj.mode || 'source-over';
   if (ghostObj.mode !== 'screen'){
     // 어떤 배경(밝든 어둡든) 위에서도 도드라지도록 진한 그림자 테두리 + 대비 보정
-    ctx.filter = 'drop-shadow(0 0 6px rgba(0,0,0,0.95)) drop-shadow(0 0 14px rgba(0,0,0,0.85)) contrast(1.35) brightness(1.15)';
+    // 어떤 배경 위에서도 도드라지도록 진한 그림자 테두리만 추가 (밝기는 더 안 올림 —
+    // 안 그러면 머리카락처럼 원래 어두운 부분까지 하얗게 날아가 버립니다)
+    ctx.filter = 'drop-shadow(0 0 6px rgba(0,0,0,0.95)) drop-shadow(0 0 14px rgba(0,0,0,0.85)) contrast(1.15)';
   }
   ctx.globalAlpha = ghostObj.mode === 'screen' ? 0.95 : 1;
   ctx.drawImage(ghostImg, gx, gy, finalW, finalH);
