@@ -315,6 +315,7 @@ html,body{
     </div>
     <button class="btn-primary" onclick="goTheme()">촬영 시작하기</button>
     <div class="crack-hint">화면을 터치하여 시작</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-13-v16</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -664,6 +665,7 @@ async function goCamera(){
 
   updateFlashUI();
   await startStream();
+  setupTiltTracking(); // 카메라 시작(사용자 터치) 시점에 기울기 센서 권한 요청 및 추적 시작
 }
 
 function toggleFlash(e){
@@ -732,6 +734,30 @@ function playShutterSound(){
     // "칵(조리개 닫힘)" — 조금 더 낮고 단단하게, 아주 살짝 늦게
     click(now + 0.06, 1900, 0.9, 0.6, 0.06);
   }catch(err){ /* 소리 재생에 실패해도 촬영 자체는 계속 진행 */ }
+}
+
+/* ---------- 실제 기기 기울기 감지 (화면 회전 잠금과 무관하게) ---------- */
+// screen.orientation은 "화면 회전 잠금"이 켜져 있으면 폰을 눕혀도 계속 세로로 나옵니다.
+// 그래서 자이로/가속도계 센서로 실제 기기가 얼마나 기울었는지 직접 읽어옵니다.
+let lastTiltGamma = 0;
+let tiltListenerAttached = false;
+
+async function setupTiltTracking(){
+  if (tiltListenerAttached) return;
+  if (typeof DeviceOrientationEvent === 'undefined') return;
+  try{
+    // iOS 13+ 는 사용자 동작(터치) 안에서 권한을 명시적으로 요청해야 합니다.
+    if (typeof DeviceOrientationEvent.requestPermission === 'function'){
+      const res = await DeviceOrientationEvent.requestPermission();
+      if (res !== 'granted') return;
+    }
+    window.addEventListener('deviceorientation', (e) => {
+      if (typeof e.gamma === 'number') lastTiltGamma = e.gamma;
+    });
+    tiltListenerAttached = true;
+  }catch(err){
+    console.warn('기기 기울기 센서를 사용할 수 없어, 화면 방향 정보로 대체합니다.', err);
+  }
 }
 
 let sequenceStarted = false;
@@ -855,14 +881,22 @@ function beginSequenceOnce(e){
   }
 
   // 기기(아이패드/폰)를 실제로 어느 방향으로 들고 있는지와, 카메라가 주는 화면(버퍼) 모양이
-  // 서로 일치하는지 확인합니다. 아이패드처럼 버퍼 자체가 이미 올바르게 가로로 나오는 기기는
-  // 손대지 않고 그대로 쓰고, 일부 폰처럼 가로로 들어도 버퍼가 세로 그대로인 경우에만
-  // 실제 회전 각도만큼 보정합니다.
-  const isPhysicallyLandscape = window.matchMedia('(orientation: landscape)').matches;
+  // 서로 일치하는지 확인합니다. "화면 자동 회전"이 꺼져 있으면 화면 방향 정보만으로는
+  // 실제로 눕혀 들었는지 알 수 없기 때문에, 가능하면 센서로 읽은 실제 기울기를 우선 사용합니다.
+  const gamma = lastTiltGamma;
+  const tiltSaysLandscape = Math.abs(gamma) > 45;
+  const screenSaysLandscape = window.matchMedia('(orientation: landscape)').matches;
+  const isPhysicallyLandscape = tiltListenerAttached ? tiltSaysLandscape : screenSaysLandscape;
   const videoIsLandscapeShaped = video.videoWidth > video.videoHeight;
+
   let rotateAngle = 0;
   if (isPhysicallyLandscape && !videoIsLandscapeShaped){
-    rotateAngle = getOrientationAngle() || 90; // 값을 못 읽으면 일단 90도로 가정
+    // 어느 쪽으로 눕혔는지: 센서 값이 있으면 그 부호로, 없으면 화면 각도로 판단
+    if (tiltListenerAttached){
+      rotateAngle = gamma > 0 ? 90 : 270;
+    } else {
+      rotateAngle = getOrientationAngle() || 90;
+    }
   }
   const orientation = isPhysicallyLandscape ? 'landscape' : 'portrait';
   state.shootAngle = rotateAngle;
