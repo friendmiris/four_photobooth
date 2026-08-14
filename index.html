@@ -315,7 +315,7 @@ html,body{
     </div>
     <button class="btn-primary" onclick="goTheme()">촬영 시작하기</button>
     <div class="crack-hint">화면을 터치하여 시작</div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-13-v21</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-13-v22</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -515,6 +515,18 @@ function getOrientationLayout(){
   return isLandscape
     ? { orientation: 'landscape', photoWidth: 1440, photoHeight: 1080, aspectRatio: 4/3 }
     : { orientation: 'portrait',  photoWidth: 1080, photoHeight: 1440, aspectRatio: 3/4 };
+}
+
+// 화면 방향이 바뀌면 즉시 반영되도록 리스너를 걸어둡니다.
+// (실제 판단은 촬영 시점에 getOrientationLayout()을 다시 호출해서 항상 최신값을 씁니다)
+if (typeof screen !== 'undefined' && screen.orientation && screen.orientation.addEventListener){
+  screen.orientation.addEventListener('change', () => {
+    console.log('[photobooth] orientation changed ->', getOrientationLayout().orientation);
+  });
+} else {
+  window.addEventListener('resize', () => {
+    console.log('[photobooth] orientation changed ->', getOrientationLayout().orientation);
+  });
 }
 
 function applyLayout(orientation){
@@ -972,6 +984,13 @@ async function capturePhoto(){
   // 화면 CSS만 가로로 바뀌는 게 아니라, 저장되는 이미지 데이터 자체가 가로/세로 비율입니다.
   const layout = getOrientationLayout();
   const w = layout.photoWidth, h = layout.photoHeight;
+  console.log('[photobooth]', {
+    orientation: layout.orientation,
+    canvasWidth: w,
+    canvasHeight: h,
+    videoWidth: video.videoWidth,
+    videoHeight: video.videoHeight
+  });
 
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
