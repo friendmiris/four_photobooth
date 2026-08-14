@@ -167,6 +167,17 @@ html,body{
 .shot-dots{display:flex;gap:9px;padding-top:6px;}
 .dot{width:9px;height:9px;border-radius:50%;border:1px solid var(--ink-dim);}
 .dot.done{background:var(--blood-bright);border-color:var(--blood-bright);}
+.debug-panel{
+  position:absolute;top:8px;right:8px;z-index:20;
+  background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.2);
+  color:#7CFC7C;font-family:monospace;font-size:11px;line-height:1.5;
+  padding:8px 10px;white-space:pre;max-width:52vw;pointer-events:none;
+}
+.debug-btn{
+  position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:20;
+  background:rgba(0,0,0,0.7);border:1px solid #c22222;color:#fff;
+  font-size:11px;padding:5px 10px;letter-spacing:1px;cursor:pointer;
+}
 .cam-guide-text{
   color:var(--ink-dim);letter-spacing:2px;font-size:24px;margin:6px 0 10px;
 }
@@ -315,7 +326,7 @@ html,body{
     </div>
     <button class="btn-primary" onclick="goTheme()">촬영 시작하기</button>
     <div class="crack-hint">화면을 터치하여 시작</div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-13-v22</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-13-v23-debug</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -340,6 +351,9 @@ html,body{
       <div class="cam-topbar">
         <div class="shot-dots" id="shotDots"></div>
       </div>
+
+      <div id="debugPanel" class="debug-panel"></div>
+      <button id="testGhostBtn" class="debug-btn" onclick="openGhostTest(event)">TEST GHOST</button>
 
       <div class="cam-guide-text" id="camGuideText">카메라를 보세요</div>
 
@@ -384,6 +398,25 @@ html,body{
         <button class="side-btn" onclick="goHome()">⌂ 처음으로</button>
       </div>
     </div>
+  </section>
+
+  <!-- ===================== GHOST 알파 테스트 (디버그용) ===================== -->
+  <section id="screen-ghosttest" class="screen" style="flex-direction:column;padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;max-width:600px;margin-bottom:12px;">
+      <h2 style="font-family:var(--font-display);margin:0;">TEST GHOST</h2>
+      <button class="btn-ghost" onclick="closeGhostTest()">닫기 ✕</button>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;width:100%;">
+      <div style="text-align:center;">
+        <div style="font-size:14px;color:var(--ink-dim);margin-bottom:6px;">#FFFFFF 배경</div>
+        <canvas id="ghostTestWhite" style="max-width:44vw;border:1px solid var(--line);"></canvas>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:14px;color:var(--ink-dim);margin-bottom:6px;">#000000 배경</div>
+        <canvas id="ghostTestBlack" style="max-width:44vw;border:1px solid var(--line);"></canvas>
+      </div>
+    </div>
+    <pre id="ghostTestStats" style="margin-top:16px;font-size:13px;color:var(--ink-dim);white-space:pre-wrap;max-width:600px;"></pre>
   </section>
 
 </div>
@@ -706,6 +739,101 @@ async function goCamera(){
 
   updateFlashUI();
   await startStream();
+  startDebugPanel();
+}
+
+/* ---------- DEBUG MODE: 실시간 진단 패널 ---------- */
+let lastCaptureDebug = null;
+let debugPanelTimer = null;
+function startDebugPanel(){
+  stopDebugPanel();
+  updateDebugPanel();
+  debugPanelTimer = setInterval(updateDebugPanel, 400);
+}
+function stopDebugPanel(){
+  if (debugPanelTimer){ clearInterval(debugPanelTimer); debugPanelTimer = null; }
+}
+function updateDebugPanel(){
+  const panel = document.getElementById('debugPanel');
+  if (!panel) return;
+  const video = document.getElementById('video');
+  const isViewportLandscape = window.matchMedia('(orientation: landscape)').matches;
+  const layout = getOrientationLayout();
+  const videoIsLandscape = video.videoWidth > video.videoHeight;
+  const expectLandscape = layout.orientation === 'landscape';
+  const needsRotationClear = video.videoWidth > 0 ? (expectLandscape !== videoIsLandscape) : false;
+
+  const lines = [
+    `orientation(viewport): ${isViewportLandscape ? 'landscape' : 'portrait'}`,
+    `window: ${window.innerWidth} x ${window.innerHeight}`,
+    ``,
+    `video.videoWidth/Height: ${video.videoWidth} x ${video.videoHeight}`,
+    `video.clientWidth/Height: ${video.clientWidth} x ${video.clientHeight}`,
+    `videoIsLandscape: ${videoIsLandscape}`,
+    ``,
+    `captureCanvas(예정): ${layout.photoWidth} x ${layout.photoHeight}`,
+    `needsRotation(예정): ${needsRotationClear}`,
+    ``,
+    `ghost globalAlpha: 1`,
+    `ghost compositeMode: source-over`,
+    `ghost filter: none`
+  ];
+  if (lastCaptureDebug){
+    lines.push('', '--- 마지막 실제 촬영 ---',
+      `rotationApplied: ${lastCaptureDebug.rotationApplied}`,
+      `sourceW/H: ${lastCaptureDebug.sourceWidth} x ${lastCaptureDebug.sourceHeight}`);
+  }
+  panel.textContent = lines.join('\n');
+}
+
+/* ---------- TEST GHOST: 귀신 PNG 자체를 흰/검정 배경 위에서 검증 ---------- */
+function openGhostTest(e){
+  if (e) e.stopPropagation();
+  showScreen('screen-ghosttest');
+  loadImage(CONFIG.ghostOverlay).then(img => {
+    [['ghostTestWhite', '#ffffff'], ['ghostTestBlack', '#000000']].forEach(([id, bg]) => {
+      const canvas = document.getElementById(id);
+      canvas.width = img.width; canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.filter = 'none';
+      ctx.globalAlpha = 1;
+      ctx.drawImage(img, 0, 0);
+    });
+
+    // 실제 alpha 채널 통계를 직접 측정해서 화면에 표시
+    const statCanvas = document.createElement('canvas');
+    statCanvas.width = img.width; statCanvas.height = img.height;
+    const sctx = statCanvas.getContext('2d');
+    sctx.drawImage(img, 0, 0);
+    const data = sctx.getImageData(0, 0, statCanvas.width, statCanvas.height).data;
+    let min = 255, max = 0, sum = 0, count = 0, lt50 = 0, lt100 = 0, lt150 = 0;
+    for (let i = 3; i < data.length; i += 4){
+      const a = data[i];
+      if (a < min) min = a;
+      if (a > max) max = a;
+      sum += a; count++;
+      if (a < 50) lt50++;
+      if (a < 100) lt100++;
+      if (a < 150) lt150++;
+    }
+    const statsText = [
+      `ghost alpha min: ${min}`,
+      `ghost alpha max: ${max}`,
+      `ghost alpha avg: ${(sum/count).toFixed(1)}`,
+      `alpha < 50 px count: ${lt50}`,
+      `alpha < 100 px count: ${lt100}`,
+      `alpha < 150 px count: ${lt150}`,
+      `total px: ${count}`
+    ].join('\n');
+    document.getElementById('ghostTestStats').textContent = statsText;
+    console.log('[photobooth][ghost-alpha-stats]', { min, max, avg: sum/count, lt50, lt100, lt150, count });
+  });
+}
+function closeGhostTest(){
+  showScreen('screen-camera');
 }
 
 function toggleFlash(e){
@@ -926,6 +1054,7 @@ function stopStream(){
     state.stream = null;
   }
   stopFaceTracking();
+  stopDebugPanel();
   sequenceStarted = false;
 }
 function switchCamera(e){
@@ -973,6 +1102,44 @@ async function runCaptureSequence(){
   buildResult();
 }
 
+// ============================================================
+// 카메라 프레임을 캔버스에 그리는 유일한 함수.
+// viewport 방향 확인 → videoWidth/Height 확인 → 필요시 회전 → cover crop → 그리기
+// 이 파이프라인 전체가 이 함수 "한 곳"에서만 일어납니다. 다른 곳에서는 절대 rotate() 하지 않습니다.
+// ============================================================
+function drawCameraFrameToCanvas(ctx, video, canvasWidth, canvasHeight, facingMode){
+  const isViewportLandscape = window.matchMedia('(orientation: landscape)').matches;
+  const videoIsLandscape = video.videoWidth > video.videoHeight;
+  const expectLandscape = canvasWidth > canvasHeight;
+  // "뷰포트는 가로인데 카메라 버퍼는 세로" (또는 그 반대)로 서로 어긋날 때만 회전합니다.
+  const needsRotation = expectLandscape !== videoIsLandscape;
+
+  let source = video, srcW = video.videoWidth, srcH = video.videoHeight, rotationApplied = 0;
+
+  if (needsRotation && video.videoWidth > 0){
+    const rot = document.createElement('canvas');
+    rot.width = video.videoHeight; rot.height = video.videoWidth;
+    const rctx = rot.getContext('2d');
+    rctx.translate(rot.width / 2, rot.height / 2);
+    rctx.rotate(Math.PI / 2);
+    rctx.drawImage(video, -video.videoWidth / 2, -video.videoHeight / 2);
+    source = rot; srcW = rot.width; srcH = rot.height;
+    rotationApplied = 90;
+  }
+
+  if (video.videoWidth > 0){
+    ctx.save();
+    if (facingMode === 'user'){ ctx.translate(canvasWidth, 0); ctx.scale(-1, 1); }
+    coverCropDraw(ctx, source, srcW, srcH, canvasWidth, canvasHeight);
+    ctx.restore();
+  }
+
+  return {
+    isViewportLandscape, videoIsLandscape, expectLandscape, needsRotation, rotationApplied,
+    sourceWidth: srcW, sourceHeight: srcH
+  };
+}
+
 async function capturePhoto(){
   const flash = document.getElementById('flashLayer');
   if (state.flashOn) flash.className = 'flash-layer on';
@@ -984,39 +1151,13 @@ async function capturePhoto(){
   // 화면 CSS만 가로로 바뀌는 게 아니라, 저장되는 이미지 데이터 자체가 가로/세로 비율입니다.
   const layout = getOrientationLayout();
   const w = layout.photoWidth, h = layout.photoHeight;
-  console.log('[photobooth]', {
-    orientation: layout.orientation,
-    canvasWidth: w,
-    canvasHeight: h,
-    videoWidth: video.videoWidth,
-    videoHeight: video.videoHeight
-  });
 
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d');
+  let dbg = { isViewportLandscape: layout.orientation === 'landscape', videoIsLandscape: video.videoWidth > video.videoHeight, needsRotation: false, rotationApplied: 0, sourceWidth: video.videoWidth, sourceHeight: video.videoHeight };
   if (hasSignal){
-    const videoIsLandscapeShaped = video.videoWidth > video.videoHeight;
-    const expectLandscape = layout.orientation === 'landscape';
-    let source = video, srcW = video.videoWidth, srcH = video.videoHeight;
-
-    if (videoIsLandscapeShaped !== expectLandscape){
-      // 일부 기기/브라우저는 폰을 가로로 돌려도 카메라 원본 버퍼가 세로 그대로 나옵니다.
-      // 이 경우에만 안전하게 90도 회전시켜 실제 방향과 맞춥니다.
-      const rot = document.createElement('canvas');
-      rot.width = video.videoHeight; rot.height = video.videoWidth;
-      const rctx = rot.getContext('2d');
-      rctx.translate(rot.width / 2, rot.height / 2);
-      rctx.rotate(Math.PI / 2);
-      rctx.drawImage(video, -video.videoWidth / 2, -video.videoHeight / 2);
-      source = rot; srcW = rot.width; srcH = rot.height;
-    }
-
-    ctx.save();
-    if (state.facingMode === 'user'){ ctx.translate(w, 0); ctx.scale(-1, 1); }
-    // 미리보기와 저장 결과가 항상 같은 기준으로 잘리도록, 같은 cover-crop 함수를 씁니다.
-    coverCropDraw(ctx, source, srcW, srcH, w, h);
-    ctx.restore();
+    dbg = drawCameraFrameToCanvas(ctx, video, w, h, state.facingMode);
   } else {
     // 카메라 신호가 없을 때(예: PC 테스트) 빈 화면 대신 보이는 테스트용 placeholder 생성
     const grad = ctx.createLinearGradient(0, 0, 0, h);
@@ -1031,6 +1172,18 @@ async function capturePhoto(){
     ctx.font = `${Math.floor(w*0.045)}px sans-serif`;
     ctx.fillText('카메라 신호 없음', w/2, h/2 + 34);
   }
+  console.log('[photobooth][capture]', {
+    orientation: layout.orientation,
+    canvasWidth: w, canvasHeight: h,
+    videoWidth: video.videoWidth, videoHeight: video.videoHeight,
+    isViewportLandscape: dbg.isViewportLandscape,
+    videoIsLandscape: dbg.videoIsLandscape,
+    needsRotation: dbg.needsRotation,
+    rotationApplied: dbg.rotationApplied,
+    sourceWidth: dbg.sourceWidth, sourceHeight: dbg.sourceHeight
+  });
+  lastCaptureDebug = { orientation: layout.orientation, canvasWidth: w, canvasHeight: h, videoWidth: video.videoWidth, videoHeight: video.videoHeight, ...dbg };
+  updateDebugPanel();
   const dataUrl = c.toDataURL('image/png');
   await sleep(60);
   if (state.flashOn) flash.className = 'flash-layer off';
@@ -1340,14 +1493,12 @@ function drawGhostOverlay(ctx, ghostObj, x, y, w, h, side){
   ctx.save();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
-  ctx.globalCompositeOperation = ghostObj.mode || 'source-over';
-  if (ghostObj.mode !== 'screen'){
-    // 어떤 배경(밝든 어둡든) 위에서도 도드라지도록 진한 그림자 테두리 + 대비 보정
-    // 어떤 배경 위에서도 도드라지도록 진한 그림자 테두리만 추가 (밝기는 더 안 올림 —
-    // 안 그러면 머리카락처럼 원래 어두운 부분까지 하얗게 날아가 버립니다)
-    ctx.filter = 'drop-shadow(0 0 6px rgba(0,0,0,0.95)) drop-shadow(0 0 14px rgba(0,0,0,0.85)) contrast(1.15)';
-  }
-  ctx.globalAlpha = ghostObj.mode === 'screen' ? 0.95 : 1;
+  // STEP 10: 귀신을 그리기 직전 캔버스 상태를 완전히 초기화합니다.
+  // drop-shadow 등 여러 filter를 체이닝하는 건 일부 모바일 브라우저에서 얇은 디테일
+  // (머리카락 같은)을 깨뜨리는 걸로 확인되어, 필터 없이 순수 알파 합성만 사용합니다.
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.filter = 'none';
+  ctx.globalAlpha = 1;
   ctx.drawImage(ghostImg, gx, gy, finalW, finalH);
   ctx.restore();
 }
