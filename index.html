@@ -168,10 +168,26 @@ html,body{
 .dot{width:9px;height:9px;border-radius:50%;border:1px solid var(--ink-dim);}
 .dot.done{background:var(--blood-bright);border-color:var(--blood-bright);}
 .debug-panel{
-  position:absolute;top:8px;right:8px;z-index:20;
-  background:rgba(0,0,0,0.75);border:1px solid rgba(255,255,255,0.2);
-  color:#7CFC7C;font-family:monospace;font-size:11px;line-height:1.5;
-  padding:8px 10px;white-space:pre;max-width:52vw;pointer-events:none;
+  display:block !important;
+  visibility:visible !important;
+  opacity:1 !important;
+  position:fixed !important;
+  top:10px !important;
+  right:10px !important;
+  left:auto !important;
+  z-index:999999 !important;
+  background:rgba(0,0,0,0.85);
+  color:#00ff66;
+  border:1px solid rgba(0,255,102,0.4);
+  font-family:monospace;
+  font-size:11px;
+  line-height:1.5;
+  padding:8px 10px;
+  white-space:pre;
+  max-width:min(70vw, 420px);
+  max-height:80vh;
+  overflow:auto;
+  pointer-events:none;
 }
 .debug-btn{
   position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:20;
@@ -352,7 +368,8 @@ html,body{
         <div class="shot-dots" id="shotDots"></div>
       </div>
 
-      <div id="debugPanel" class="debug-panel"></div>
+      <div id="debugPanel" class="debug-panel">BUILD: v23-debug
+(loading...)</div>
       <button id="testGhostBtn" class="debug-btn" onclick="openGhostTest(event)">TEST GHOST</button>
 
       <div class="cam-guide-text" id="camGuideText">카메라를 보세요</div>
@@ -764,6 +781,8 @@ function updateDebugPanel(){
   const needsRotationClear = video.videoWidth > 0 ? (expectLandscape !== videoIsLandscape) : false;
 
   const lines = [
+    `BUILD: v23-debug`,
+    ``,
     `orientation(viewport): ${isViewportLandscape ? 'landscape' : 'portrait'}`,
     `window: ${window.innerWidth} x ${window.innerHeight}`,
     ``,
