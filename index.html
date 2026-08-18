@@ -45,6 +45,7 @@ html,body{
 
 .screen{
   position:absolute;inset:0;
+  z-index:0;
   display:none;
   flex-direction:column;
   align-items:center;
@@ -84,6 +85,15 @@ html,body{
 }
 #screen-home .tagline{
   margin-top:22px;color:var(--ink-dim);font-size:25px;letter-spacing:2px;
+}
+.eyebrow{
+  font-size:14px;letter-spacing:8px;color:var(--blood-bright);
+  margin-bottom:18px;opacity:.85;
+}
+.horror-bg-decor{
+  position:absolute;inset:0;z-index:-1;pointer-events:none;
+  background-repeat:no-repeat;background-size:100% 100%;background-position:center;
+  opacity:.95;
 }
 .btn-primary{
   margin-top:56px;
@@ -287,14 +297,30 @@ html,body{
 
 /* 세로 화면(태블릿 세로 모드, 폰)에서는 사진을 위로, 버튼을 아래로 쌓아서
    사진이 화면 폭에 꽉 차게 크게 보이도록 합니다. */
+/* CONFIG.forceOrientation === 'landscape' 일 때는 실제 브라우저 뷰포트 모양과
+   상관없이 항상 가로용 레이아웃(사진+버튼 나란히)을 유지합니다. html에 붙는
+   .lock-landscape-ui 클래스로 아래 세로 전용 규칙을 무력화합니다. */
 @media (orientation: portrait){
-  .result-wrap{flex-direction:column;gap:16px;}
-  #resultCanvas{max-width:94vw;max-height:56vh;width:auto;}
-  .result-side{width:100%;max-width:520px;}
-  #screen-home h1{font-size:clamp(32px, 10vw, 40px);letter-spacing:3px;}
+  html:not(.lock-landscape-ui) .result-wrap{flex-direction:column;gap:16px;}
+  html:not(.lock-landscape-ui) #resultCanvas{max-width:94vw;max-height:56vh;width:auto;}
+  html:not(.lock-landscape-ui) .result-side{width:100%;max-width:520px;}
+  html:not(.lock-landscape-ui) #screen-home h1{font-size:clamp(32px, 10vw, 40px);letter-spacing:3px;}
+
+  /* 폰을 세로로 들고 있어도(자동회전이 꺼져 있어도) CONFIG.forceOrientation이
+     'landscape'면 화면 전체를 강제로 가로로 돌려서 보여줍니다.
+     (표준 "웹 강제 가로모드" 트릭: #app을 90도 회전시켜 화면 전체를 채웁니다) */
+  html.lock-landscape-ui:not(.force-portrait-ui) body{ overflow:hidden; }
+  html.lock-landscape-ui:not(.force-portrait-ui) #app{
+    position:absolute;
+    top:0; left:0;
+    width:100vh;
+    height:100vw;
+    transform-origin:top left;
+    transform:rotate(90deg) translateY(-100%);
+  }
 }
 @media (max-width:640px){
-  .result-side{flex-direction:column;}
+  html:not(.lock-landscape-ui) .result-side{flex-direction:column;}
 }
 /* ---------- 폰 화면에서는 글씨를 다시 작게 (태블릿 대비 축소) ---------- */
 @media (max-width:480px){
@@ -336,18 +362,21 @@ html,body{
 
   <!-- ===================== HOME ===================== -->
   <section id="screen-home" class="screen active">
+    <div class="horror-bg-decor" aria-hidden="true"></div>
     <div class="logo-wrap">
+      <div class="eyebrow">HORROR EXHIBITION</div>
       <h1 id="homeTitle">인생네컷</h1>
       <div class="eng" id="homeSubtitle">PHOTO BOOTH</div>
       <div class="tagline" id="homeTagline">카메라를 향해 서 주세요. 무언가... 함께 찍힐지도 모릅니다.</div>
     </div>
     <button class="btn-primary" onclick="goTheme()">촬영 시작하기</button>
     <div class="crack-hint">화면을 터치하여 시작</div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-18-v26-force-landscape</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-18-v29-force-rotate</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
   <section id="screen-theme" class="screen">
+    <div class="horror-bg-decor" aria-hidden="true"></div>
     <div class="step-title">테마 선택</div>
     <div class="step-sub">원하는 테마를 고르거나, 직접 만든 액자 이미지를 업로드하세요</div>
     <div class="theme-grid" id="themeGrid"></div>
@@ -472,6 +501,12 @@ const CONFIG = {
     bucket: 'photobooth'
   }
 };
+
+// forceOrientation이 'landscape'/'portrait'로 고정되어 있으면, 실제 뷰포트 모양과
+// 무관하게 CSS 레이아웃도 그 방향에 맞춰 고정합니다 (result-wrap 등).
+if (CONFIG.forceOrientation === 'landscape' || CONFIG.forceOrientation === 'portrait'){
+  document.documentElement.classList.add('lock-landscape-ui');
+}
 
 // 테마 목록. photoFilter 는 CSS filter 문법 그대로 사용.
 // overlayImage : 사진 한 장 한 장 위에 합성될 이미지(예: 귀신). 투명배경 PNG 권장.
@@ -645,6 +680,97 @@ function currentTheme(){ return allThemes()[state.themeIndex]; }
 document.getElementById('homeTitle').textContent = CONFIG.appTitle;
 document.getElementById('homeSubtitle').textContent = CONFIG.appSubtitle;
 document.getElementById('homeTagline').textContent = CONFIG.tagline;
+
+// 홈/테마 화면 배경용 핏자국을 실제 사진 느낌의 얼룩(불규칙한 방울+튐+스프레이)으로
+// 캔버스에 직접 그려서 이미지로 만들어둡니다 (CSS 원 그라데이션 대신 사용).
+function renderDecorBloodDataURL(w, h, color){
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const ctx = c.getContext('2d');
+  let seed = 7;
+  function rnd(){ seed = (seed * 9301 + 49297) % 233280; return seed / 233280; }
+  const dark = '#4a0808', mid = color || '#8a1414';
+
+  function blot(cx, cy, r, alpha){
+    ctx.save(); ctx.globalAlpha = alpha;
+    const grad = ctx.createRadialGradient(cx-r*0.2, cy-r*0.2, r*0.1, cx, cy, r*1.15);
+    grad.addColorStop(0, dark); grad.addColorStop(0.55, mid); grad.addColorStop(1, 'rgba(138,20,20,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    const pts = 10 + Math.floor(rnd()*4);
+    for (let i = 0; i <= pts; i++){
+      const a = (i/pts) * Math.PI*2;
+      const rr = r * (0.5 + rnd()*0.7);
+      const px = cx + Math.cos(a)*rr, py = cy + Math.sin(a)*rr*(0.85+rnd()*0.3);
+      i===0 ? ctx.moveTo(px,py) : ctx.lineTo(px,py);
+    }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
+  function tail(cx, cy, angle, len, wid){
+    ctx.save(); ctx.globalAlpha = 0.6 + rnd()*0.25; ctx.fillStyle = mid;
+    const ex = cx+Math.cos(angle)*len, ey = cy+Math.sin(angle)*len;
+    const nx = -Math.sin(angle), ny = Math.cos(angle);
+    ctx.beginPath();
+    ctx.moveTo(cx+nx*wid, cy+ny*wid);
+    ctx.quadraticCurveTo(cx+Math.cos(angle)*len*0.5+nx*wid*0.3, cy+Math.sin(angle)*len*0.5+ny*wid*0.3, ex, ey);
+    ctx.quadraticCurveTo(cx+Math.cos(angle)*len*0.5-nx*wid*0.3, cy+Math.sin(angle)*len*0.5-ny*wid*0.3, cx-nx*wid, cy-ny*wid);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(ex, ey, wid*0.6, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+  function mist(cx, cy, spread, count){
+    ctx.fillStyle = mid;
+    for (let i = 0; i < count; i++){
+      const a = rnd()*Math.PI*2, d = Math.pow(rnd(),0.6)*spread;
+      const px = cx+Math.cos(a)*d, py = cy+Math.sin(a)*d*0.85;
+      const closeness = 1 - Math.min(d/spread, 1);
+      const r = 0.6 + closeness*(2.5+rnd()*4) + rnd()*1.2;
+      ctx.globalAlpha = 0.35 + rnd()*0.5;
+      ctx.beginPath(); ctx.arc(px,py,r,0,Math.PI*2); ctx.fill();
+    }
+  }
+  function drip(cx, topY, wid, len){
+    ctx.save(); ctx.globalAlpha = 0.8; ctx.fillStyle = mid;
+    ctx.beginPath();
+    ctx.moveTo(cx-wid/2, topY);
+    ctx.quadraticCurveTo(cx-wid*0.35, topY+len*0.4, cx-wid*0.12, topY+len*0.75);
+    ctx.quadraticCurveTo(cx-wid*0.04, topY+len*0.94, cx, topY+len);
+    ctx.quadraticCurveTo(cx+wid*0.04, topY+len*0.94, cx+wid*0.12, topY+len*0.75);
+    ctx.quadraticCurveTo(cx+wid*0.35, topY+len*0.4, cx+wid/2, topY);
+    ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx+(rnd()-0.5)*6, topY+len+8+rnd()*6, wid*0.28, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  const corners = [
+    { x: w*0.05, y: h*0.05, dir: -0.9 },
+    { x: w*0.95, y: h*0.06, dir: -2.2 },
+    { x: w*0.04, y: h*0.94, dir: 0.9 },
+    { x: w*0.96, y: h*0.92, dir: 2.2 }
+  ];
+  corners.forEach(cn => {
+    const r = Math.min(w,h) * (0.03 + rnd()*0.015);
+    blot(cn.x, cn.y, r, 0.95);
+    for (let i = 0; i < 4 + Math.floor(rnd()*3); i++){
+      tail(cn.x, cn.y, cn.dir + (rnd()-0.5)*1.6, r*1.5 + rnd()*r*3, r*0.15 + rnd()*r*0.2);
+    }
+    mist(cn.x, cn.y, Math.min(w,h)*0.18, 90);
+  });
+  for (let i = 0; i < 3; i++){
+    drip(w*(0.1+rnd()*0.15), 0, 8+rnd()*8, 40+rnd()*60);
+    drip(w*(0.75+rnd()*0.15), 0, 8+rnd()*8, 40+rnd()*60);
+  }
+  return c.toDataURL('image/png');
+}
+
+function applyDecorBlood(){
+  const crackSvg = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 600'%3E%3Cg stroke='%23555' stroke-width='1' fill='none' opacity='0.35'%3E%3Cpath d='M500 300 L120 60 M500 300 L860 40 M500 300 L60 420 M500 300 L930 460 M500 300 L500 20 M500 300 L500 580 M500 300 L40 250 M500 300 L960 240'/%3E%3Cpath d='M120 60 L180 130 M860 40 L790 120 M60 420 L150 400 M930 460 L820 440 M500 20 L470 90 M500 580 L540 520'/%3E%3C/g%3E%3C/svg%3E\")";
+  document.querySelectorAll('.horror-bg-decor').forEach(el => {
+    const w = Math.max(window.innerWidth, 900), h = Math.max(window.innerHeight, 600);
+    const bloodUrl = renderDecorBloodDataURL(w, h, '#8a1414');
+    el.style.backgroundImage = `url("${bloodUrl}"), ${crackSvg}`;
+  });
+}
 
 function goHome(){
   stopStream();
@@ -1562,14 +1688,20 @@ function drawBloodSplatter(ctx, color){
   ];
 
   corners.forEach(c => {
-    const r = 26 + rnd()*14;
-    splatBlot(c.x, c.y, r, 0.9);
-    for (let i = 0; i < 3 + Math.floor(rnd()*2); i++){
-      const angle = c.dir + (rnd()-0.5)*1.4;
-      splatTail(c.x, c.y, angle, 30 + rnd()*70, 3 + rnd()*4);
+    const r = 34 + rnd()*18;
+    splatBlot(c.x, c.y, r, 0.95);
+    for (let i = 0; i < 4 + Math.floor(rnd()*3); i++){
+      const angle = c.dir + (rnd()-0.5)*1.6;
+      splatTail(c.x, c.y, angle, 40 + rnd()*90, 3.5 + rnd()*4.5);
     }
-    mist(c.x, c.y, 120, 70);
+    mist(c.x, c.y, 160, 100);
   });
+
+  // 상단/하단 가장자리를 따라 흐르는 추가 핏줄기 몇 가닥 (가로로 넓은 프레임을 더 채웁니다)
+  for (let i = 0; i < 3; i++){
+    const x = CANVAS_W * (0.32 + rnd()*0.36);
+    drip(x, 0, 8 + rnd()*8, 30 + rnd()*40);
+  }
 
   // 상단에서 흘러내리는 핏줄기 몇 가닥
   drip(70, 0, 13, 66 + rnd()*20);
@@ -1784,6 +1916,8 @@ function showScreen(id){
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById(id).classList.add('active');
 }
+
+applyDecorBlood();
 </script>
 </body>
 </html>
