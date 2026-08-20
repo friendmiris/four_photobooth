@@ -183,6 +183,24 @@ html,body{
   html.lock-landscape-ui:not(.force-portrait-ui) .nav-row{margin-top:6px;}
   html.lock-landscape-ui:not(.force-portrait-ui) .btn-go,
   html.lock-landscape-ui:not(.force-portrait-ui) .btn-ghost{font-size:12px;padding:8px 16px;}
+
+  /* 결과 화면도 같은 이유로 압축합니다. vh 단위는 회전된 컨테이너의 실제 크기와
+     어긋날 수 있어서, 고정 px 값 위주로 지정합니다. */
+  html.lock-landscape-ui:not(.force-portrait-ui) #screen-result{padding:8px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .result-headline{font-size:15px;margin-bottom:0;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .result-subline{font-size:10px;margin-bottom:3px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .result-wrap{gap:10px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) #resultCanvas{max-height:320px;max-width:55vw;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .result-side{width:170px;gap:5px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .result-side h2{font-size:13px;margin:0;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .frame-color-row{gap:5px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .frame-chip{font-size:10px;padding:6px 0;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .side-btn{font-size:10px;padding:6px 8px;gap:5px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .qr-note{font-size:8px;line-height:1.3;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .status-msg{font-size:8px;min-height:0;}
+  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox{padding:4px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox canvas,
+  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox img{width:64px !important;height:64px !important;}
 }
 .btn-ghost{
   padding:14px 28px;border:1px solid var(--line);background:transparent;color:var(--ink-dim);
@@ -218,12 +236,17 @@ html,body{
 }
 .cam-frame{
   position:relative;
-  width:min(680px, 96vw);
-  height:min(76vh, 900px);
+  width:min(900px, 97vw);
+  height:min(88vh, 1000px);
   flex:1;
   min-height:0;
   background:#050505;
   overflow:hidden;
+}
+.rotate-fix-mini{
+  position:absolute;bottom:8px;right:8px;z-index:6;
+  background:rgba(0,0,0,0.6);border:1px solid rgba(255,255,255,0.35);color:#fff;
+  font-size:12px;padding:5px 9px;letter-spacing:0.5px;cursor:pointer;border-radius:4px;
 }
 #video{
   width:100%;height:100%;object-fit:cover;display:block;
@@ -251,9 +274,12 @@ html,body{
 }
 @keyframes pulse{0%{transform:translate(-50%,-50%) scale(1.3);opacity:0;}30%{opacity:1;}100%{transform:translate(-50%,-50%) scale(1);opacity:1;}}
 .cam-hint{
-  margin-top:12px;text-align:center;
-  color:var(--ink-dim);letter-spacing:2px;font-size:24px;z-index:5;
+  position:absolute;top:8px;left:50%;transform:translateX(-50%);z-index:6;
+  color:#ffdede;letter-spacing:1px;font-size:14px;
+  background:rgba(120,0,0,0.55);padding:6px 14px;border-radius:4px;
+  max-width:90%;text-align:center;
 }
+.cam-hint:empty{display:none;}
 .cam-bottom-row{
   margin-top:14px;width:100%;max-width:520px;
   display:flex;align-items:center;justify-content:space-between;
@@ -404,27 +430,24 @@ html,body{
         <div class="shot-dots" id="shotDots"></div>
       </div>
 
-
-      <div class="cam-guide-text" id="camGuideText">카메라를 보세요</div>
-
       <div class="cam-frame">
         <video id="video" autoplay playsinline muted></video>
-        <div class="stand-guide">◀ 최대한 왼쪽으로 서주세요<br><span>오른쪽은 누군가를 위한 자리일지도...</span></div>
+        <div class="stand-guide">◀ 최대한 왼쪽으로 서주세요</div>
         <div class="corner tl"></div>
         <div class="corner tr"></div>
         <div class="corner bl"></div>
         <div class="corner br"></div>
         <div class="flash-layer" id="flashLayer"></div>
         <div class="countdown-num" id="countdownNum" style="display:none;"></div>
+        <div class="cam-hint" id="camHint"></div>
+        <button class="rotate-fix-mini" onclick="cycleManualRotation(event)" title="화면이 이상하면 눌러서 회전 보정">📐 <span id="rotateFixState">0°</span></button>
       </div>
 
-      <div class="cam-hint" id="camHint">촬영 버튼을 눌러주세요</div>
       <div class="cam-bottom-row">
-        <button class="cam-btn" onclick="switchCamera(event)">↺ 카메라 전환</button>
+        <button class="cam-btn" onclick="switchCamera(event)">↺ 전환</button>
         <button class="shutter-btn" id="shutterBtn" onclick="beginSequenceOnce(event)" aria-label="촬영 시작"></button>
-        <button class="cam-btn" id="flashToggleBtn" onclick="toggleFlash(event)">⚡ 플래시 <span id="flashState">OFF</span></button>
+        <button class="cam-btn" id="flashToggleBtn" onclick="toggleFlash(event)">⚡ <span id="flashState">OFF</span></button>
       </div>
-      <button class="cam-btn" id="rotateFixBtn" onclick="cycleManualRotation(event)" style="margin-top:8px;">📐 화면이 이상하면 눌러 회전 보정 (<span id="rotateFixState">0° (자동)</span>)</button>
     </div>
   </section>
 
@@ -999,8 +1022,7 @@ async function goCamera(){
   renderShotDots();
   document.getElementById('shutterBtn').disabled = false;
 
-  document.getElementById('camGuideText').textContent = '카메라를 보세요';
-  document.getElementById('camHint').textContent = '촬영 버튼을 눌러주세요';
+  document.getElementById('camHint').textContent = '';
 
   // 이 기기에서 이전에 회전 보정 버튼으로 맞춰둔 값이 있으면 자동으로 다시 적용합니다
   // (매번 버튼을 다시 누를 필요 없게)
@@ -1364,12 +1386,26 @@ function drawCameraFrameToCanvas(ctx, video, canvasWidth, canvasHeight, facingMo
   // "뷰포트는 가로인데 카메라 버퍼는 세로" (또는 그 반대)로 서로 어긋날 때만 자동으로 회전합니다.
   const autoNeedsRotation = expectLandscape !== videoIsLandscape;
 
+  // 자동으로 회전이 필요할 때, 90도로 돌릴지 270도로 돌릴지는 기기를 어느 방향으로
+  // 눕혔는지에 따라 달라집니다. screen.orientation.angle(실제 OS가 인식한 회전각)을
+  // 우선 사용해서 방향을 판단합니다 — 자이로 부호 추측보다 훨씬 신뢰도가 높습니다.
+  let autoRotationDeg = 90;
+  if (autoNeedsRotation){
+    let angle = 0;
+    if (screen.orientation && typeof screen.orientation.angle === 'number') angle = screen.orientation.angle;
+    else if (typeof window.orientation === 'number') angle = window.orientation;
+    angle = ((angle % 360) + 360) % 360;
+    // OS가 "오른쪽으로 눕혔다"(angle=270, 화면이 시계반대방향으로 90도 돈 것으로 인식)고
+    // 판단했으면 반대로 보정, 그 외엔 기본 90도.
+    autoRotationDeg = (angle === 270) ? 270 : 90;
+  }
+
   // 일부 기기는 videoWidth/Height만 봐서는 알 수 없게, 버퍼 크기는 정상인데
   // 그 안의 실제 화면 내용 자체가 이미 돌아간 채로 들어옵니다. 이런 경우를 위해
   // 사용자가 직접 지정한 보정값(manualRotationOverride)이 있으면 그걸 최우선으로 씁니다.
   const rotationDeg = (typeof manualRotationOverride === 'number' && manualRotationOverride !== 0)
     ? manualRotationOverride
-    : (autoNeedsRotation ? 90 : 0);
+    : (autoNeedsRotation ? autoRotationDeg : 0);
 
   let source = video, srcW = video.videoWidth, srcH = video.videoHeight;
 
@@ -1762,15 +1798,22 @@ function getGhostPanel(index){
 // 배경이 밝든 어둡든 항상 또렷하게 보이게 합니다)
 function drawGhostOverlay(ctx, ghostObj, x, y, w, h, side){
   const ghostImg = ghostObj.img;
-  // 이번 귀신 패널 이미지는 가로로 넓은(상반신+팔) 비율이라, 셀 너비에 맞춰 키우면
-  // 세로 길이가 자연히 정해지도록 하고, 살짝 아래쪽에 자리잡게 배치합니다.
-  const gw = w * 0.72;
-  const gh = gw * (ghostImg.height / ghostImg.width);
-  const finalH = Math.min(gh, h * 0.85);
-  const finalW = finalH * (ghostImg.width / ghostImg.height);
-  const gy = y + (h - finalH) * 0.58;
-  const gx = side === 'left' ? (x + w * 0.02) : (x + w - finalW - w * 0.02);
+  // 셀 전체를 꽉 채우도록 cover 방식으로 확대해서 그리고, 셀 경계 밖으로 넘치는
+  // 부분은 완전히 잘라냅니다(clip). 이러면 원본 이미지 가장자리에 남아있는 배경이
+  // 셀 밖으로 밀려나서 절대 보이지 않고, 귀신이 화면을 꽉 채운 느낌이 됩니다.
+  const scale = Math.max(w / ghostImg.width, h / ghostImg.height) * 1.06;
+  const drawW = ghostImg.width * scale;
+  const drawH = ghostImg.height * scale;
+  // 얼굴/머리카락이 셀 위쪽에 오도록, 세로는 위쪽으로 살짝 치우치게 배치
+  const gy = y - (drawH - h) * 0.22;
+  // side에 따라 살짝 좌우로 치우치게 해서, 사람이 서는 반대쪽에 무게가 더 실리게 함
+  const biasX = side === 'left' ? -(drawW - w) * 0.30 : -(drawW - w) * 0.70;
+  const gx = x + biasX;
+
   ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, w, h);
+  ctx.clip();
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   // STEP 10: 귀신을 그리기 직전 캔버스 상태를 완전히 초기화합니다.
@@ -1779,7 +1822,7 @@ function drawGhostOverlay(ctx, ghostObj, x, y, w, h, side){
   ctx.globalCompositeOperation = 'source-over';
   ctx.filter = 'none';
   ctx.globalAlpha = 1;
-  ctx.drawImage(ghostImg, gx, gy, finalW, finalH);
+  ctx.drawImage(ghostImg, gx, gy, drawW, drawH);
   ctx.restore();
 }
 
