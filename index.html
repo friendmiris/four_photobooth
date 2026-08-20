@@ -112,7 +112,7 @@ html,body{
   position:absolute;bottom:34px;font-size:21px;color:var(--ink-dim);letter-spacing:2px;
 }
 .orient-toggle{
-  position:absolute;top:22px;right:22px;display:flex;gap:8px;z-index:2;
+  position:absolute;bottom:16px;left:16px;display:flex;gap:8px;z-index:2;
 }
 .orient-btn{
   background:rgba(0,0,0,0.5);border:1px solid var(--line);color:var(--ink-dim);
@@ -183,6 +183,14 @@ html,body{
   html.lock-landscape-ui:not(.force-portrait-ui) .nav-row{margin-top:6px;}
   html.lock-landscape-ui:not(.force-portrait-ui) .btn-go,
   html.lock-landscape-ui:not(.force-portrait-ui) .btn-ghost{font-size:12px;padding:8px 16px;}
+
+  /* 카메라 화면도 좁은 세로 공간을 최대한 카메라 미리보기에 쓰도록 압축 */
+  html.lock-landscape-ui:not(.force-portrait-ui) .cam-wrap{padding:6px 10px 10px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .cam-topbar{margin-bottom:2px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .cam-frame{height:auto;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .cam-bottom-row{margin-top:4px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .cam-btn{font-size:12px;padding:8px 12px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .shutter-btn{width:46px;height:46px;}
 
   /* 결과 화면도 같은 이유로 압축합니다. vh 단위는 회전된 컨테이너의 실제 크기와
      어긋날 수 있어서, 고정 px 값 위주로 지정합니다. */
@@ -403,7 +411,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v42-js-rotate-ghost-crop</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v43-270-fixed-right-ghost</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -432,7 +440,7 @@ html,body{
 
       <div class="cam-frame">
         <video id="video" autoplay playsinline muted></video>
-        <div class="stand-guide">◀ 최대한 왼쪽으로 서주세요</div>
+        <div class="stand-guide">◀ 여기에 서주세요<br><span>오른쪽은 누군가의 자리일지도...</span></div>
         <div class="corner tl"></div>
         <div class="corner tr"></div>
         <div class="corner bl"></div>
@@ -440,7 +448,7 @@ html,body{
         <div class="flash-layer" id="flashLayer"></div>
         <div class="countdown-num" id="countdownNum" style="display:none;"></div>
         <div class="cam-hint" id="camHint"></div>
-        <button class="rotate-fix-mini" onclick="cycleManualRotation(event)" title="화면이 이상하면 눌러서 회전 보정">📐 <span id="rotateFixState">0°</span></button>
+        <button class="rotate-fix-mini" onclick="cycleManualRotation(event)" title="화면이 이상하면 눌러서 회전 보정">📐 <span id="rotateFixState">270°</span></button>
       </div>
 
       <div class="cam-bottom-row">
@@ -747,7 +755,9 @@ let state = {
   facingMode: 'user',
   flashOn: false,
   manualRotation: 0, // 0/90/180/270 - 기기가 회전된 화면을 주는 경우 사용자가 직접 보정
-  autoSuggestedRotation: 0, // 자이로 센서(gamma)로 자동 추천된 회전값 (수동으로 덮어쓰지 않았을 때 사용)
+  autoSuggestedRotation: 270, // 기본 회전값. 이 행사에서는 폰을 왼쪽으로 눕혔을 때 270도가 항상 정방향이라
+  // 확인됐어서, 자이로 추측 대신 이 값을 기본으로 고정합니다. 다른 기기/설치에서 다르면
+  // 촬영 화면의 회전 보정 버튼으로 언제든 덮어쓸 수 있습니다.
   manualRotationTouched: false, // 사용자가 버튼을 한 번이라도 눌렀는지
   frameColor: 'black',   // 'black' | 'white' - 결과 화면에서 선택
   lastFaceSide: 'right', // 얼굴 인식으로 갱신되는 "귀신이 서야 할 쪽"
@@ -978,21 +988,10 @@ function handleDeviceOrientation(e){
   const gamma = e.gamma;
   if (gamma == null) return;
   lastGamma = gamma;
-  // 45도/30도로 여유를 둬서(히스테리시스), 45도 근처에서 살짝만 흔들려도
-  // portrait/landscape가 계속 왔다갔다 하지 않게 합니다.
   if (Math.abs(gamma) > 45) physicalOrientation = 'landscape';
   else if (Math.abs(gamma) < 30) physicalOrientation = 'portrait';
-
-  if (!state.manualRotationTouched){
-    const suggested = physicalOrientation === 'landscape' ? (gamma > 0 ? 90 : 270) : 0;
-    if (suggested !== state.autoSuggestedRotation){
-      state.autoSuggestedRotation = suggested;
-      const btn = document.getElementById('rotateFixState');
-      if (btn) btn.textContent = suggested + '° (자동)';
-      applyPreviewRotation(suggested);
-    }
-  }
-  updateDebugPanel();
+  // 자이로 부호로 회전값을 자동으로 바꾸는 로직은 기기별로 신뢰도가 낮아서 껐습니다.
+  // 이제 기본값(270도, 위 CONFIG 근처 주석 참고)과 수동 보정 버튼만 사용합니다.
 }
 
 async function setupOrientationSensor(){
@@ -1068,7 +1067,7 @@ function cycleManualRotation(e){
 
 // 한 번 맞춰둔 회전 보정값을 이 기기(브라우저)에 저장해서, 다음 촬영부터는
 // 버튼을 다시 누르지 않아도 자동으로 같은 각도가 적용되게 합니다.
-const ROTATION_STORAGE_KEY = 'photobooth_manual_rotation';
+const ROTATION_STORAGE_KEY = 'photobooth_manual_rotation_v2'; // v2: 기본값을 270도로 바꾸면서 이전 저장값 무시
 function saveSavedRotation(deg){
   try{ localStorage.setItem(ROTATION_STORAGE_KEY, String(deg)); }catch(err){ /* 저장 실패해도 이번 세션엔 계속 적용됨 */ }
 }
@@ -1389,7 +1388,7 @@ function drawCameraFrameToCanvas(ctx, video, canvasWidth, canvasHeight, facingMo
   // 자동으로 회전이 필요할 때, 90도로 돌릴지 270도로 돌릴지는 기기를 어느 방향으로
   // 눕혔는지에 따라 달라집니다. screen.orientation.angle(실제 OS가 인식한 회전각)을
   // 우선 사용해서 방향을 판단합니다 — 자이로 부호 추측보다 훨씬 신뢰도가 높습니다.
-  let autoRotationDeg = 90;
+  let autoRotationDeg = 270;
   if (autoNeedsRotation){
     let angle = 0;
     if (screen.orientation && typeof screen.orientation.angle === 'number') angle = screen.orientation.angle;
@@ -1582,7 +1581,9 @@ function drawComposite(){
   if (CONFIG.ghostOverlay){
     Promise.all([0,1,2,3].map(i => getGhostPanel(i))).then(panels => {
       positions.forEach(([x, y], i) => {
-        const side = (state.photos[i] && state.photos[i].ghostSide) || 'right';
+        // 2명이 함께 찍는 경우가 많아 얼굴 위치로 좌우를 정하면 귀신이 가려지기 쉬워서,
+        // 항상 오른쪽에 고정합니다.
+        const side = 'right';
         drawGhostOverlay(ctx, panels[i], x, y, CELL_W, CELL_H, side);
       });
       // 귀신을 그린 "다음"에 사람 실루엣을 다시 덮어 그려서,
