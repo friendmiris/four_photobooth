@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="틈">
 <meta name="theme-color" content="#0a0a0a">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <!-- 사람 위치를 인식해서 귀신을 반대쪽에 배치하기 위한 얼굴 인식 라이브러리 -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0/dist/tf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/blazeface@0.1.0/dist/blazeface.min.js"></script>
@@ -422,7 +422,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v59-instant-qr</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v60-new-qr-library</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -1971,13 +1971,14 @@ async function uploadForQr(){
       qrBox.innerHTML = '';
       qrBox.style.display = 'block';
       try{
-        // 실제 검증된 QR 라이브러리(qrcodejs)로 생성합니다. 이미지로 그리는 게 아니라
-        // URL 데이터를 QR 모듈로 인코딩하는 진짜 QR입니다.
-        new QRCode(qrBox, {
-          text: finalUrl,
+        // 실제 검증된, 활발히 유지보수되는 QR 라이브러리(soldair/qrcode)로 생성합니다.
+        // 이미지를 그리는 게 아니라 URL 데이터를 QR 모듈로 인코딩하는 진짜 QR입니다.
+        const qrCanvas = document.createElement('canvas');
+        qrBox.appendChild(qrCanvas);
+        await QRCode.toCanvas(qrCanvas, finalUrl, {
           width: 200,
-          height: 200,
-          correctLevel: QRCode.CorrectLevel.L
+          margin: 2,
+          errorCorrectionLevel: 'M'
         });
       }catch(qrErr){
         // 혹시라도 QR 생성 자체가 실패하면, 최소한 주소를 눈으로 보고 입력할 수 있게 보여줍니다.
