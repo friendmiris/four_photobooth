@@ -129,40 +129,40 @@ html,body{
 .orient-btn.active{border-color:var(--blood-bright);color:var(--ink);background:rgba(194,34,34,.18);}
 
 /* ---------- THEME / SETTINGS ---------- */
-#screen-theme{align-items:stretch;justify-content:flex-start;padding:40px;overflow-y:auto;}
-.step-title{font-family:var(--font-display);font-size:32px;letter-spacing:3px;margin-bottom:4px;}
-.step-sub{color:var(--ink-dim);font-size:23px;margin-bottom:22px;letter-spacing:1px;}
+#screen-theme{align-items:stretch;justify-content:flex-start;padding:clamp(14px,3vh,40px) clamp(16px,4vw,40px);overflow-y:auto;}
+.step-title{font-family:var(--font-display);font-size:clamp(20px,3.2vh,32px);letter-spacing:3px;margin-bottom:4px;}
+.step-sub{color:var(--ink-dim);font-size:clamp(13px,2vh,23px);margin-bottom:clamp(8px,2vh,22px);letter-spacing:1px;}
 .theme-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
-  gap:16px;margin-bottom:30px;padding:4px;
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));
+  gap:clamp(8px,1.5vh,16px);margin-bottom:clamp(10px,2.5vh,30px);padding:4px;
   flex-shrink:0;
 }
 .theme-card{
   border:2px solid var(--line);
   border-radius:10px;
-  padding:16px;text-align:center;cursor:pointer;background:var(--panel);
+  padding:clamp(8px,1.5vh,16px);text-align:center;cursor:pointer;background:var(--panel);
   transition:.2s;
 }
 .theme-card:hover{border-color:rgba(194,34,34,.5);transform:translateY(-2px);}
 .theme-card.selected{border-color:var(--blood-bright);box-shadow:0 0 18px rgba(194,34,34,.4);}
 .theme-swatch{
-  height:88px;border-radius:8px;margin-bottom:12px;
+  height:clamp(40px,7vh,88px);border-radius:8px;margin-bottom:clamp(6px,1.5vh,12px);
   display:flex;align-items:center;justify-content:center;
-  font-size:34px;
+  font-size:clamp(18px,3vh,34px);
   box-shadow:inset 0 0 20px rgba(0,0,0,.5);
 }
-.theme-name{font-size:24px;letter-spacing:1px;font-weight:600;}
-.theme-desc{font-size:16px;color:var(--ink-dim);margin-top:4px;letter-spacing:.5px;}
+.theme-name{font-size:clamp(14px,2.2vh,24px);letter-spacing:1px;font-weight:600;}
+.theme-desc{font-size:clamp(10px,1.4vh,16px);color:var(--ink-dim);margin-top:4px;letter-spacing:.5px;}
 .theme-card.upload{display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--ink-dim);border-style:dashed;border-radius:10px;}
 .theme-card.upload input{display:none;}
 
-.interval-row{display:flex;gap:12px;margin-bottom:30px;flex-wrap:wrap;}
+.interval-row{display:flex;gap:12px;margin-bottom:clamp(10px,2.5vh,30px);flex-wrap:wrap;}
 .chip{
-  padding:12px 22px;border:1px solid var(--line);background:var(--panel);
-  cursor:pointer;font-size:24px;letter-spacing:1px;
+  padding:clamp(7px,1.4vh,12px) clamp(14px,2.5vw,22px);border:1px solid var(--line);background:var(--panel);
+  cursor:pointer;font-size:clamp(14px,2vh,24px);letter-spacing:1px;
 }
 .chip.selected{border-color:var(--blood-bright);color:var(--ink);background:rgba(138,20,20,.25);}
-.chip input{width:56px;background:transparent;border:none;color:var(--ink);font-size:24px;outline:none;}
+.chip input{width:56px;background:transparent;border:none;color:var(--ink);font-size:clamp(14px,2vh,24px);outline:none;}
 
 .nav-row{display:flex;justify-content:space-between;margin-top:auto;}
 
@@ -231,7 +231,7 @@ html,body{
 .cam-wrap{
   position:relative;width:100%;height:100%;
   display:flex;flex-direction:column;align-items:center;
-  padding:16px 16px 24px;
+  padding:clamp(6px,1.5vh,16px) 16px clamp(8px,2vh,24px);
 }
 .cam-topbar{
   width:100%;display:flex;justify-content:center;align-items:center;
@@ -311,39 +311,40 @@ html,body{
 .flash-layer.off{transition:opacity .35s;opacity:0;}
 
 /* ---------- RESULT ---------- */
-#screen-result{padding:16px;overflow-y:auto;}
+#screen-result{padding:clamp(8px,2vh,16px);overflow-y:auto;overflow-x:auto;}
 .result-headline{
-  font-family:var(--font-display);font-size:32px;letter-spacing:1px;
+  font-family:var(--font-display);font-size:clamp(16px,3vh,32px);letter-spacing:1px;
   text-align:center;margin-bottom:2px;
 }
 .result-headline .hl{color:var(--blood-bright);}
 .result-subline{
-  color:var(--ink-dim);font-size:22px;letter-spacing:2px;text-align:center;margin-bottom:10px;
+  color:var(--ink-dim);font-size:clamp(11px,1.8vh,22px);letter-spacing:2px;text-align:center;margin-bottom:clamp(4px,1vh,10px);
 }
-.result-wrap{display:flex;gap:28px;align-items:center;flex:1;min-height:0;}
+.result-wrap{display:flex;gap:clamp(10px,2.5vw,28px);align-items:center;flex:1;min-height:0;justify-content:center;}
 #resultCanvas{
-  max-height:88vh;max-width:48vw;
+  max-height:80vh;max-width:min(48vw, calc(100vw - 340px));
   box-shadow:0 0 40px rgba(0,0,0,.6);
   border:1px solid var(--line);
 }
-.result-side{display:flex;flex-direction:column;gap:14px;width:300px;flex-shrink:0;}
+.result-side{display:flex;flex-direction:column;gap:clamp(6px,1.2vh,14px);width:min(260px, 26vw);flex-shrink:0;}
 .frame-color-row{display:flex;gap:10px;}
 .frame-chip{
-  flex:1;text-align:center;padding:12px 0;border:1px solid var(--line);
-  background:var(--panel);font-size:23px;letter-spacing:1px;cursor:pointer;
+  flex:1;text-align:center;padding:clamp(6px,1.2vh,12px) 0;border:1px solid var(--line);
+  background:var(--panel);font-size:clamp(13px,1.8vh,23px);letter-spacing:1px;cursor:pointer;
 }
 .frame-chip.selected{border-color:var(--blood-bright);background:rgba(138,20,20,.25);}
-.result-side h2{font-family:var(--font-display);letter-spacing:3px;font-size:30px;margin:0 0 6px;}
+.result-side h2{font-family:var(--font-display);letter-spacing:3px;font-size:clamp(16px,2.4vh,30px);margin:0 0 6px;}
 .side-btn{
-  padding:14px;border:1px solid var(--line);background:var(--panel);color:var(--ink);
-  font-size:24px;letter-spacing:2px;cursor:pointer;text-align:left;
+  padding:clamp(8px,1.4vh,14px);border:1px solid var(--line);background:var(--panel);color:var(--ink);
+  font-size:clamp(13px,1.8vh,24px);letter-spacing:2px;cursor:pointer;text-align:left;
   display:flex;align-items:center;gap:10px;
 }
 .side-btn:hover{border-color:var(--blood-bright);}
 .side-btn.primary{border-color:var(--blood-bright);background:rgba(138,20,20,.25);}
 #qrBox{background:#fff;padding:10px;display:none;align-self:flex-start;}
-.qr-note{font-size:22px;color:var(--ink-dim);line-height:1.5;}
-.status-msg{font-size:22px;color:var(--ink-dim);min-height:16px;}
+#qrBox canvas, #qrBox img{width:clamp(64px,9vh,128px) !important;height:clamp(64px,9vh,128px) !important;}
+.qr-note{font-size:clamp(10px,1.4vh,22px);color:var(--ink-dim);line-height:1.4;}
+.status-msg{font-size:clamp(10px,1.4vh,22px);color:var(--ink-dim);min-height:16px;}
 
 /* 세로 화면(태블릿 세로 모드, 폰)에서는 사진을 위로, 버튼을 아래로 쌓아서
    사진이 화면 폭에 꽉 차게 크게 보이도록 합니다. */
@@ -418,7 +419,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v47-raw-original-ghost</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v49-tablet-no-scroll</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -455,7 +456,7 @@ html,body{
         <div class="flash-layer" id="flashLayer"></div>
         <div class="countdown-num" id="countdownNum" style="display:none;"></div>
         <div class="cam-hint" id="camHint"></div>
-        <button class="rotate-fix-mini" onclick="cycleManualRotation(event)" title="화면이 이상하면 눌러서 회전 보정">📐 <span id="rotateFixState">270°</span></button>
+        <button class="rotate-fix-mini" onclick="cycleManualRotation(event)" title="화면이 이상하면 눌러서 회전 보정">📐 <span id="rotateFixState">0°</span></button>
       </div>
 
       <div class="cam-bottom-row">
@@ -762,9 +763,9 @@ let state = {
   facingMode: 'user',
   flashOn: false,
   manualRotation: 0, // 0/90/180/270 - 기기가 회전된 화면을 주는 경우 사용자가 직접 보정
-  autoSuggestedRotation: 270, // 기본 회전값. 이 행사에서는 폰을 왼쪽으로 눕혔을 때 270도가 항상 정방향이라
-  // 확인됐어서, 자이로 추측 대신 이 값을 기본으로 고정합니다. 다른 기기/설치에서 다르면
-  // 촬영 화면의 회전 보정 버튼으로 언제든 덮어쓸 수 있습니다.
+  autoSuggestedRotation: 0, // 기기마다 카메라 버퍼 특성이 달라서(폰 vs 태블릿), 강제로 고정하지
+  // 않고 기본은 회전 없음으로 둡니다. 실제로 방향이 안 맞는 기기에서만 촬영 화면의
+  // 작은 회전 버튼으로 한 번 맞추면, 그 기기(브라우저)에 저장되어 계속 유지됩니다.
   manualRotationTouched: false, // 사용자가 버튼을 한 번이라도 눌렀는지
   frameColor: 'black',   // 'black' | 'white' - 결과 화면에서 선택
   lastFaceSide: 'right', // 얼굴 인식으로 갱신되는 "귀신이 서야 할 쪽"
