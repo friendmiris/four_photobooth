@@ -424,7 +424,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-21-v61-embedded-qr</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-21-v62-per-mode-rotation</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -1049,6 +1049,19 @@ function applyOrientationMode(mode){
   document.querySelectorAll('.orient-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.mode === mode);
   });
+  // 가로/세로 모드는 서로 다른 회전 보정값이 필요할 수 있어서, 모드를 바꾸면
+  // 이 모드용으로 저장된 값을 새로 불러오고, 저장된 게 없으면 보정 없이 시작합니다.
+  // (가로에서 맞춘 보정값이 세로에 잘못 적용되는 문제를 막기 위함)
+  const savedForThisMode = loadSavedRotation();
+  if (savedForThisMode !== null){
+    state.manualRotation = savedForThisMode;
+    state.manualRotationTouched = true;
+  } else {
+    state.manualRotation = 0;
+    state.manualRotationTouched = false;
+  }
+  const rf = document.getElementById('rotateFixState');
+  if (rf) rf.textContent = state.manualRotationTouched ? (state.manualRotation + '° (저장됨)') : '0°';
   applyForcedRotationLayout();
 }
 
@@ -1172,14 +1185,14 @@ const THEMES = [
     name: '흑백 공포',
     bg: '#0c0a0a',
     accent: '#c22222',
-    photoFilter: 'grayscale(0.85) contrast(1.35) brightness(0.65) saturate(0.6)'
+    photoFilter: 'grayscale(0.9) contrast(1.15) brightness(1.05) saturate(0.6)'
   },
   {
     id: 'redroom',
     name: '레드 톤',
     bg: '#160404',
     accent: '#ff2b2b',
-    photoFilter: 'grayscale(0.5) sepia(0.35) hue-rotate(-40deg) contrast(1.25) brightness(0.75)'
+    photoFilter: 'grayscale(0.4) sepia(0.3) hue-rotate(-40deg) contrast(1.1) brightness(1.0)'
   }
 ];
 
@@ -1572,13 +1585,16 @@ function cycleManualRotation(e){
 
 // 한 번 맞춰둔 회전 보정값을 이 기기(브라우저)에 저장해서, 다음 촬영부터는
 // 버튼을 다시 누르지 않아도 자동으로 같은 각도가 적용되게 합니다.
-const ROTATION_STORAGE_KEY = 'photobooth_manual_rotation_v2'; // v2: 기본값을 270도로 바꾸면서 이전 저장값 무시
+const ROTATION_STORAGE_KEY_PREFIX = 'photobooth_manual_rotation_v3_'; // v3: 가로/세로 모드별로 따로 저장
+function getRotationStorageKey(){
+  return ROTATION_STORAGE_KEY_PREFIX + (currentOrientationMode || 'auto');
+}
 function saveSavedRotation(deg){
-  try{ localStorage.setItem(ROTATION_STORAGE_KEY, String(deg)); }catch(err){ /* 저장 실패해도 이번 세션엔 계속 적용됨 */ }
+  try{ localStorage.setItem(getRotationStorageKey(), String(deg)); }catch(err){ /* 저장 실패해도 이번 세션엔 계속 적용됨 */ }
 }
 function loadSavedRotation(){
   try{
-    const v = localStorage.getItem(ROTATION_STORAGE_KEY);
+    const v = localStorage.getItem(getRotationStorageKey());
     if (v === null) return null;
     const n = parseInt(v, 10);
     return [0, 90, 180, 270].includes(n) ? n : null;
