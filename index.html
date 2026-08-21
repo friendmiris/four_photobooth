@@ -419,7 +419,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v50-precise-viewport-height</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v52-signed-url</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -1955,11 +1955,32 @@ async function uploadForQr(){
         body: blob
       });
       if (!res.ok) throw new Error(await res.text());
-      const publicUrl = `${url}/storage/v1/object/public/${bucket}/${filename}`;
+
+      // 버킷이 public으로 설정되어 있는지와 무관하게 항상 열리도록, 서명된(signed) URL을
+      // 우선 사용합니다. 서명 URL 발급이 실패하는 경우에만 기존 public URL로 대체합니다.
+      let finalUrl = `${url}/storage/v1/object/public/${bucket}/${filename}`;
+      try{
+        const signRes = await fetch(`${url}/storage/v1/object/sign/${bucket}/${filename}`, {
+          method: 'POST',
+          headers: {
+            'apikey': anonKey,
+            'Authorization': `Bearer ${anonKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 7 }) // 7일간 유효
+        });
+        if (signRes.ok){
+          const signData = await signRes.json();
+          if (signData && signData.signedURL){
+            finalUrl = `${url}/storage/v1${signData.signedURL}`;
+          }
+        }
+      }catch(signErr){ /* 서명 실패 시 public URL 그대로 사용 */ }
+
       const qrBox = document.getElementById('qrBox');
       qrBox.innerHTML = '';
       qrBox.style.display = 'block';
-      new QRCode(qrBox, { text: publicUrl, width: 180, height: 180 });
+      new QRCode(qrBox, { text: finalUrl, width: 180, height: 180 });
       statusEl.textContent = 'QR코드를 스캔해서 사진을 받아가세요!';
     }catch(err){
       statusEl.textContent = '업로드 실패: ' + err.message;
