@@ -214,7 +214,6 @@ html,body{
   html.lock-landscape-ui:not(.force-portrait-ui) .qr-note{font-size:8px;line-height:1.3;}
   html.lock-landscape-ui:not(.force-portrait-ui) .status-msg{font-size:8px;min-height:0;}
   html.lock-landscape-ui:not(.force-portrait-ui) #qrBox{padding:8px;}
-  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox canvas{width:150px !important;height:150px !important;}
   html.lock-landscape-ui:not(.force-portrait-ui) #qrBox img{display:none !important;}
 }
 .btn-ghost{
@@ -342,10 +341,10 @@ html,body{
 .side-btn:hover{border-color:var(--blood-bright);}
 .side-btn.primary{border-color:var(--blood-bright);background:rgba(138,20,20,.25);}
 #qrBox{background:#fff;padding:16px;display:none;align-self:flex-start;}
-/* QR은 캔버스로만 렌더링합니다. 라이브러리가 내부적으로 만드는 <img>는 항상 숨겨서
-   두 개가 겹쳐 보이거나 왜곡되는 일이 없게 합니다. 크기는 스캔 인식률을 위해
-   너무 작아지지 않도록 최소 140px을 보장합니다. */
-#qrBox canvas{width:clamp(140px,16vh,220px) !important;height:clamp(140px,16vh,220px) !important;}
+/* QR 캔버스는 라이브러리가 만드는 실제 픽셀 크기(200x200) 그대로 두고, 화면이
+   좁을 때만 비율 유지하며 줄어들게 합니다. 강제로 다른 px값을 씌우면(예: 64px)
+   렌더링 직후 크기가 바뀌면서 순간적으로 커 보이는 현상이 생겨서 없앴습니다. */
+#qrBox canvas{display:block;max-width:100%;height:auto;}
 #qrBox img{display:none !important;}
 .qr-note{font-size:clamp(10px,1.4vh,22px);color:var(--ink-dim);line-height:1.4;}
 .status-msg{font-size:clamp(10px,1.4vh,22px);color:var(--ink-dim);min-height:16px;}
@@ -423,7 +422,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v53-qr-size-fix</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v54-qr-short-url-fix</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -1960,43 +1959,32 @@ async function uploadForQr(){
       });
       if (!res.ok) throw new Error(await res.text());
 
-      // 버킷이 public으로 설정되어 있는지와 무관하게 항상 열리도록, 서명된(signed) URL을
-      // 우선 사용합니다. 서명 URL 발급이 실패하는 경우에만 기존 public URL로 대체합니다.
-      let finalUrl = `${url}/storage/v1/object/public/${bucket}/${filename}`;
-      try{
-        const signRes = await fetch(`${url}/storage/v1/object/sign/${bucket}/${filename}`, {
-          method: 'POST',
-          headers: {
-            'apikey': anonKey,
-            'Authorization': `Bearer ${anonKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 7 }) // 7일간 유효
-        });
-        if (signRes.ok){
-          const signData = await signRes.json();
-          if (signData && signData.signedURL){
-            finalUrl = `${url}/storage/v1${signData.signedURL}`;
-          }
-        }
-      }catch(signErr){ /* 서명 실패 시 public URL 그대로 사용 */ }
+      // 서명(signed) URL은 토큰이 붙어서 길이가 훨씬 길어지고, 그 결과 일부 QR
+      // 라이브러리에서 렌더링이 실패(빈 흰 박스)하는 문제가 있어서 뺐습니다.
+      // 대신 파일명 자체를 짧게 만들어서 public URL을 최대한 짧고 안전하게 유지합니다.
+      const finalUrl = `${url}/storage/v1/object/public/${bucket}/${filename}`;
 
       // 콘솔에 실제 QR에 들어가는 URL을 남겨서, 필요하면 바로 확인/복사할 수 있게 합니다.
-      console.log('[photobooth][QR URL]', finalUrl);
+      console.log('[photobooth][QR URL]', finalUrl, '(길이:', finalUrl.length, '자)');
 
       const qrBox = document.getElementById('qrBox');
       qrBox.innerHTML = '';
       qrBox.style.display = 'block';
-      // 실제 검증된 QR 라이브러리(qrcodejs)로 생성합니다. 이미지로 그리는 게 아니라
-      // URL 데이터를 QR 모듈로 인코딩하는 진짜 QR입니다. width/height를 넉넉하게 주고
-      // (CSS에서도 최소 140px을 보장), correctLevel을 M으로 낮춰서 URL이 길어도
-      // 모듈이 과도하게 촘촘해지지 않게 합니다.
-      new QRCode(qrBox, {
-        text: finalUrl,
-        width: 220,
-        height: 220,
-        correctLevel: QRCode.CorrectLevel.M
-      });
+      try{
+        // 실제 검증된 QR 라이브러리(qrcodejs)로 생성합니다. 이미지로 그리는 게 아니라
+        // URL 데이터를 QR 모듈로 인코딩하는 진짜 QR입니다. 캔버스 자체 크기와 CSS
+        // 표시 크기를 동일하게 맞춰서, 렌더링 후 크기가 갑자기 바뀌는 현상도 없앴습니다.
+        new QRCode(qrBox, {
+          text: finalUrl,
+          width: 200,
+          height: 200,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }catch(qrErr){
+        // 혹시라도 QR 생성 자체가 실패하면, 최소한 주소를 눈으로 보고 입력할 수 있게 보여줍니다.
+        console.error('[photobooth][QR 생성 실패]', qrErr);
+        qrBox.innerHTML = `<div style="padding:12px;color:#000;font-size:12px;word-break:break-all;max-width:200px;">${finalUrl}</div>`;
+      }
       statusEl.textContent = 'QR코드를 스캔해서 사진을 받아가세요!';
     }catch(err){
       statusEl.textContent = '업로드 실패: ' + err.message;
