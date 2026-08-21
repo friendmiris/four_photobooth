@@ -213,9 +213,9 @@ html,body{
   html.lock-landscape-ui:not(.force-portrait-ui) .side-btn{font-size:10px;padding:6px 8px;gap:5px;}
   html.lock-landscape-ui:not(.force-portrait-ui) .qr-note{font-size:8px;line-height:1.3;}
   html.lock-landscape-ui:not(.force-portrait-ui) .status-msg{font-size:8px;min-height:0;}
-  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox{padding:4px;}
-  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox canvas,
-  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox img{width:64px !important;height:64px !important;}
+  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox{padding:8px;}
+  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox canvas{width:150px !important;height:150px !important;}
+  html.lock-landscape-ui:not(.force-portrait-ui) #qrBox img{display:none !important;}
 }
 .btn-ghost{
   padding:14px 28px;border:1px solid var(--line);background:transparent;color:var(--ink-dim);
@@ -341,8 +341,12 @@ html,body{
 }
 .side-btn:hover{border-color:var(--blood-bright);}
 .side-btn.primary{border-color:var(--blood-bright);background:rgba(138,20,20,.25);}
-#qrBox{background:#fff;padding:10px;display:none;align-self:flex-start;}
-#qrBox canvas, #qrBox img{width:clamp(64px,9vh,128px) !important;height:clamp(64px,9vh,128px) !important;}
+#qrBox{background:#fff;padding:16px;display:none;align-self:flex-start;}
+/* QR은 캔버스로만 렌더링합니다. 라이브러리가 내부적으로 만드는 <img>는 항상 숨겨서
+   두 개가 겹쳐 보이거나 왜곡되는 일이 없게 합니다. 크기는 스캔 인식률을 위해
+   너무 작아지지 않도록 최소 140px을 보장합니다. */
+#qrBox canvas{width:clamp(140px,16vh,220px) !important;height:clamp(140px,16vh,220px) !important;}
+#qrBox img{display:none !important;}
 .qr-note{font-size:clamp(10px,1.4vh,22px);color:var(--ink-dim);line-height:1.4;}
 .status-msg{font-size:clamp(10px,1.4vh,22px);color:var(--ink-dim);min-height:16px;}
 
@@ -419,7 +423,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v52-signed-url</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v53-qr-size-fix</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -1977,10 +1981,22 @@ async function uploadForQr(){
         }
       }catch(signErr){ /* 서명 실패 시 public URL 그대로 사용 */ }
 
+      // 콘솔에 실제 QR에 들어가는 URL을 남겨서, 필요하면 바로 확인/복사할 수 있게 합니다.
+      console.log('[photobooth][QR URL]', finalUrl);
+
       const qrBox = document.getElementById('qrBox');
       qrBox.innerHTML = '';
       qrBox.style.display = 'block';
-      new QRCode(qrBox, { text: finalUrl, width: 180, height: 180 });
+      // 실제 검증된 QR 라이브러리(qrcodejs)로 생성합니다. 이미지로 그리는 게 아니라
+      // URL 데이터를 QR 모듈로 인코딩하는 진짜 QR입니다. width/height를 넉넉하게 주고
+      // (CSS에서도 최소 140px을 보장), correctLevel을 M으로 낮춰서 URL이 길어도
+      // 모듈이 과도하게 촘촘해지지 않게 합니다.
+      new QRCode(qrBox, {
+        text: finalUrl,
+        width: 220,
+        height: 220,
+        correctLevel: QRCode.CorrectLevel.M
+      });
       statusEl.textContent = 'QR코드를 스캔해서 사진을 받아가세요!';
     }catch(err){
       statusEl.textContent = '업로드 실패: ' + err.message;
