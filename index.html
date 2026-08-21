@@ -422,7 +422,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v54-qr-short-url-fix</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-19-v57-test-qr</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -485,6 +485,9 @@ html,body{
         <button class="side-btn primary" onclick="downloadResult()">⬇ 사진 저장</button>
         <button class="side-btn" onclick="uploadForQr()">▦ QR 다시 만들기</button>
         <div id="qrBox"></div>
+        <button class="side-btn" id="qrTestLinkBtn" style="display:none;" onclick="openQrTestLink()">🔗 QR 링크 테스트 (새 탭으로 열기)</button>
+        <button class="side-btn" onclick="showTestQr()">🧪 테스트 QR (example.com)</button>
+        <div id="testQrBox" style="display:none;background:#fff;padding:16px;align-self:flex-start;"></div>
         <div class="status-msg" id="statusMsg"></div>
         <div class="qr-note">* QR 코드를 스캔하면 사진을 휴대폰으로 받을 수 있어요</div>
         <button class="side-btn" onclick="retake()">↻ 다시 찍기</button>
@@ -1931,6 +1934,26 @@ function downloadResult(){
   }
 }
 
+let lastQrUrl = null;
+function openQrTestLink(){
+  if (!lastQrUrl){ alert('아직 QR이 생성되지 않았어요.'); return; }
+  window.open(lastQrUrl, '_blank');
+}
+// Supabase/사진 URL과 완전히 무관한, 순수하게 "이 기기에서 QR 자체가 카메라에
+// 인식되는지"만 확인하는 테스트용 QR. https://example.com 같은 아주 단순한
+// 문자열이라 QR 인식 자체의 문제인지, 사진 URL 쪽 문제인지 구분할 수 있습니다.
+function showTestQr(){
+  const box = document.getElementById('testQrBox');
+  box.style.display = 'block';
+  box.innerHTML = '';
+  new QRCode(box, {
+    text: 'https://example.com',
+    width: 200,
+    height: 200,
+    correctLevel: QRCode.CorrectLevel.L
+  });
+  console.log('[photobooth][테스트 QR] https://example.com');
+}
 async function uploadForQr(){
   const statusEl = document.getElementById('statusMsg');
   if (!resultReady){
@@ -1959,33 +1982,79 @@ async function uploadForQr(){
       });
       if (!res.ok) throw new Error(await res.text());
 
-      // 서명(signed) URL은 토큰이 붙어서 길이가 훨씬 길어지고, 그 결과 일부 QR
-      // 라이브러리에서 렌더링이 실패(빈 흰 박스)하는 문제가 있어서 뺐습니다.
-      // 대신 파일명 자체를 짧게 만들어서 public URL을 최대한 짧고 안전하게 유지합니다.
-      const finalUrl = `${url}/storage/v1/object/public/${bucket}/${filename}`;
+      const publicUrl = `${url}/storage/v1/object/public/${bucket}/${filename}`;
+
+      // fetch()는 CORS 때문에 실제로는 열리는 이미지도 "실패"로 잘못 판단할 수 있어서,
+      // <img> 로딩(브라우저가 실제로 이미지를 표시할 수 있는지)으로 직접 검증합니다.
+      // 이게 진짜로 사람들이 QR을 스캔했을 때 벌어지는 상황과 가장 가깝습니다.
+      function testImageLoads(testUrl, timeoutMs){
+        return new Promise((resolve) => {
+          const img = new Image();
+          const timer = setTimeout(() => resolve(false), timeoutMs);
+          img.onload = () => { clearTimeout(timer); resolve(true); };
+          img.onerror = () => { clearTimeout(timer); resolve(false); };
+          img.src = testUrl + (testUrl.includes('?') ? '&' : '?') + 'cachebust=' + Date.now();
+        });
+      }
+
+      statusEl.textContent = '사진 주소 확인 중...';
+      let finalUrl = publicUrl;
+      const publicWorks = await testImageLoads(publicUrl, 6000);
+      console.log('[photobooth][public URL 접근 테스트]', publicWorks, publicUrl);
+
+      if (!publicWorks){
+        // public URL이 안 열리면, 버킷이 비공개일 가능성이 높습니다. 서명된(signed) URL로
+        // 재시도합니다. (서명 URL은 길어서 QR이 실패할 수 있어 correctLevel을 더 낮춰 사용)
+        try{
+          const signRes = await fetch(`${url}/storage/v1/object/sign/${bucket}/${filename}`, {
+            method: 'POST',
+            headers: {
+              'apikey': anonKey,
+              'Authorization': `Bearer ${anonKey}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ expiresIn: 60 * 60 * 24 * 7 })
+          });
+          if (signRes.ok){
+            const signData = await signRes.json();
+            if (signData && signData.signedURL){
+              const signedFullUrl = `${url}/storage/v1${signData.signedURL}`;
+              const signedWorks = await testImageLoads(signedFullUrl, 6000);
+              console.log('[photobooth][signed URL 접근 테스트]', signedWorks, signedFullUrl);
+              if (signedWorks) finalUrl = signedFullUrl;
+            }
+          }
+        }catch(signErr){ console.warn('signed URL 발급 실패', signErr); }
+      }
 
       // 콘솔에 실제 QR에 들어가는 URL을 남겨서, 필요하면 바로 확인/복사할 수 있게 합니다.
-      console.log('[photobooth][QR URL]', finalUrl, '(길이:', finalUrl.length, '자)');
+      console.log('[photobooth][최종 QR URL]', finalUrl, '(길이:', finalUrl.length, '자)');
+      lastQrUrl = finalUrl;
+      const testBtn = document.getElementById('qrTestLinkBtn');
+      if (testBtn) testBtn.style.display = 'flex';
 
       const qrBox = document.getElementById('qrBox');
       qrBox.innerHTML = '';
       qrBox.style.display = 'block';
       try{
         // 실제 검증된 QR 라이브러리(qrcodejs)로 생성합니다. 이미지로 그리는 게 아니라
-        // URL 데이터를 QR 모듈로 인코딩하는 진짜 QR입니다. 캔버스 자체 크기와 CSS
-        // 표시 크기를 동일하게 맞춰서, 렌더링 후 크기가 갑자기 바뀌는 현상도 없앴습니다.
+        // URL 데이터를 QR 모듈로 인코딩하는 진짜 QR입니다.
         new QRCode(qrBox, {
           text: finalUrl,
           width: 200,
           height: 200,
-          correctLevel: QRCode.CorrectLevel.M
+          correctLevel: QRCode.CorrectLevel.L
         });
       }catch(qrErr){
         // 혹시라도 QR 생성 자체가 실패하면, 최소한 주소를 눈으로 보고 입력할 수 있게 보여줍니다.
         console.error('[photobooth][QR 생성 실패]', qrErr);
         qrBox.innerHTML = `<div style="padding:12px;color:#000;font-size:12px;word-break:break-all;max-width:200px;">${finalUrl}</div>`;
       }
-      statusEl.textContent = 'QR코드를 스캔해서 사진을 받아가세요!';
+      if (finalUrl === publicUrl && !publicWorks){
+        statusEl.textContent = '⚠ 사진 주소 접근이 확인되지 않았어요. Supabase 버킷 공개(Public) 설정을 확인해주세요. (그래도 QR/저장은 시도해보세요)';
+      } else {
+        statusEl.textContent = 'QR코드를 스캔해서 사진을 받아가세요!';
+      }
     }catch(err){
       statusEl.textContent = '업로드 실패: ' + err.message;
     }
