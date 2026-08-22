@@ -424,7 +424,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-21-v64-frame-height-fix</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-21-v65-hide-upload-card</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
@@ -992,6 +992,9 @@ function renderQrToCanvas(qr, canvas, cellSize, margin){
 /* ============================================================
    여기부터 설정(CONFIG). 필요한 부분만 바꿔서 쓰세요.
    ============================================================ */
+// 테마 선택 화면의 "내 액자 이미지 업로드" 카드 표시 여부 (요청 시 꺼둠, true로 바꾸면 다시 보임)
+const ENABLE_FRAME_UPLOAD = false;
+
 const CONFIG = {
   appTitle: '틈',
   appSubtitle: 'CRACK',
@@ -1422,17 +1425,20 @@ function renderThemeGrid(){
     grid.appendChild(card);
   });
 
-  const uploadCard = document.createElement('div');
-  uploadCard.className = 'theme-card upload';
-  uploadCard.innerHTML = `
-    <div style="font-size:26px;margin-bottom:6px;">＋</div>
-    <div style="font-size:22px;">내 액자 이미지<br>업로드</div>
-    <input type="file" accept="image/png,image/jpeg" id="frameUploadInput">
-  `;
-  uploadCard.onclick = () => document.getElementById('frameUploadInput').click();
-  grid.appendChild(uploadCard);
-
-  document.getElementById('frameUploadInput').addEventListener('change', handleFrameUpload);
+  // 액자 이미지 업로드 카드는 요청으로 잠시 꺼둡니다. 나중에 다시 켜려면
+  // 아래 ENABLE_FRAME_UPLOAD 값만 true로 바꾸면 됩니다.
+  if (ENABLE_FRAME_UPLOAD){
+    const uploadCard = document.createElement('div');
+    uploadCard.className = 'theme-card upload';
+    uploadCard.innerHTML = `
+      <div style="font-size:26px;margin-bottom:6px;">＋</div>
+      <div style="font-size:22px;">내 액자 이미지<br>업로드</div>
+      <input type="file" accept="image/png,image/jpeg" id="frameUploadInput">
+    `;
+    uploadCard.onclick = () => document.getElementById('frameUploadInput').click();
+    grid.appendChild(uploadCard);
+    document.getElementById('frameUploadInput').addEventListener('change', handleFrameUpload);
+  }
 }
 
 function handleFrameUpload(e){
