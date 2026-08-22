@@ -196,7 +196,7 @@ html,body{
   /* 카메라 화면도 좁은 세로 공간을 최대한 카메라 미리보기에 쓰도록 압축 */
   html.lock-landscape-ui:not(.force-portrait-ui) .cam-wrap{padding:6px 10px 10px;}
   html.lock-landscape-ui:not(.force-portrait-ui) .cam-topbar{margin-bottom:2px;}
-  html.lock-landscape-ui:not(.force-portrait-ui) .cam-frame{height:auto;}
+  html.lock-landscape-ui:not(.force-portrait-ui) .cam-frame{flex:1;min-height:0;}
   html.lock-landscape-ui:not(.force-portrait-ui) .cam-bottom-row{margin-top:4px;}
   html.lock-landscape-ui:not(.force-portrait-ui) .cam-btn{font-size:12px;padding:8px 12px;}
   html.lock-landscape-ui:not(.force-portrait-ui) .shutter-btn{width:46px;height:46px;}
@@ -424,7 +424,7 @@ html,body{
       <button class="orient-btn" data-mode="landscape" onclick="applyOrientationMode('landscape')">▭ 가로로 촬영</button>
       <button class="orient-btn" data-mode="portrait" onclick="applyOrientationMode('portrait')">▯ 세로로 촬영</button>
     </div>
-    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-21-v63-no-auto-rotate</div>
+    <div style="position:absolute;bottom:6px;right:10px;font-size:11px;color:rgba(255,255,255,0.25);letter-spacing:1px;">build 2026-08-21-v64-frame-height-fix</div>
   </section>
 
   <!-- ===================== THEME / SETTINGS ===================== -->
